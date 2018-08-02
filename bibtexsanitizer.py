@@ -4,6 +4,7 @@ from pprint import pprint
 import copy
 import logging
 
+import sh
 import arxiv
 import bibtexparser
 import pyparsing as pp
@@ -90,18 +91,25 @@ def _is_newstyle_arxiv_id(arxiv_number):
 
 
 def extract_fields_from_arxiv_query_result(result):
+    fields = dict()
+    # extract doi if there is one
+    if result['doi']:
+        print(result['id'], result['doi'])
+        fields['doi'] = result['doi']
+    # extract arxiv info
     arxiv_number = re.search('arxiv.org/abs/([^v]*)', result['id']).group(1)
     newstyle = _is_newstyle_arxiv_id(arxiv_number)
     if newstyle:
-        return dict(
+        fields.update(dict(
             archiveprefix='arXiv',
             primaryclass=result['tags'][0]['term'],
             eprint=arxiv_number
-        )
+        ))
     else:
-        return dict(
+        fields.update(dict(
             eprint=arxiv_number
-        )
+        ))
+    return fields
 
 
 def arxiv_query_title(title):
@@ -125,13 +133,12 @@ def _has_journal_arxiv_field(db_entry):
     return match.group(1)
 
 
-def fill_bibdatabase_arxiv_entries(db, max_processed_entries=None,
-                                   verbose=False):
+def fill_bibdatabase_arxiv_entries(db, max_processed_entries=None, force=False):
     """Use titles to try to fill in the arxiv details."""
     num_processed_entries = 0
     for entry in db.entries:
         # if an eprint entry already exists, don't touch anything
-        if 'eprint' in entry:
+        if 'eprint' in entry and not force:
             continue
 
         arxiv_id = _has_journal_arxiv_field(entry)
@@ -165,6 +172,72 @@ def fill_bibdatabase_arxiv_entries(db, max_processed_entries=None,
                 print('Processed {} entries. Stopping as requested.'.format(
                     num_processed_entries))
                 return
+
+
+def update_entry_from_doi(entry):
+    """Refill entry fields using its DOI."""
+    if 'doi' not in entry:
+        return entry
+    ans = sh.curl('-LH', r'Accept: text/bibliography; style=bibtex',
+                  r'http://dx.doi.org/' + entry['doi']).stdout
+    ans = ans.decode('UTF-8')
+    accepted_fields = ['title', 'volume', 'year', 'number', 'journal',
+                       'publisher', 'month']
+    new_fields = {}
+    for field in accepted_fields:
+        value = re.search(field + r'={([^}]*)}', ans)
+        if value:
+            new_fields[field] = value[1]
+    entry.update(new_fields)
+    return entry
+
+
+def update_entries_from_doi(path_or_db):
+    if isinstance(path_or_db, str):
+        path = path_or_db
+        db = load_bibtex_database(path_or_db)
+    else:
+        path = None
+        db = path_or_db
+    for entry in db.entries:
+        update_entry_from_doi(entry)
+    if path:
+        save_bibtex_database_to_file(path, db)
+    else:
+        return db
+
+
+def check_id_style(path_or_db, style='gscholar'):
+    if isinstance(path_or_db, str):
+        db = load_bibtex_database(path_or_db)
+    else:
+        db = path_or_db
+
+    if style != 'gscholar':
+        raise ValueError('Only google scholar style works for now.')
+    everything_good = True
+    for entry in db.entries:
+        ID = entry['ID']
+        if style == 'gscholar':
+            matcher = re.compile(r'[a-z]*[0-9]{4}[a-z]*$')
+        match = matcher.match(ID)
+        if not match:
+            everything_good = False
+            print('{} does not match the ID style.'.format(ID))
+    return everything_good
+
+
+def check_fields(path_or_db, fields=None):
+    """Prints all entries not containing one of the specified fields."""
+    if isinstance(path_or_db, str):
+        db = load_bibtex_database(path_or_db)
+    else:
+        db = path_or_db
+
+    for entry in db.entries:
+        for field in fields:
+            if field not in entry:
+                print('{} is missing the {}'.format(entry['ID'], field))
 
 
 def fix_ids_to_scholar_style(path):
@@ -202,4 +275,3 @@ def fix_ids_to_scholar_style(path):
                     'There is already an entry with this ID, there may be something wrong!')
             entry['ID'] = newid
     save_bibtex_database_to_file(path, db)
-
