@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
 	name="bibtexsanitizer",
 	version="0.1",
-	packages=["bibtexsanitizer"],
+	py_modules=["bibtexsanitizer"],
 
 	# dependencies
 	install_requires=[
