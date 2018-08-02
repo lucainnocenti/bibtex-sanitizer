@@ -179,7 +179,7 @@ def update_entry_from_doi(entry):
     if 'doi' not in entry:
         return entry
     ans = sh.curl('-LH', r'Accept: text/bibliography; style=bibtex',
-                  r'http://dx.doi.org/' + entry['doi']).stdout
+                  r'https://doi.org/' + entry['doi']).stdout
     ans = ans.decode('UTF-8')
     accepted_fields = ['title', 'volume', 'year', 'number', 'journal',
                        'publisher', 'month']
