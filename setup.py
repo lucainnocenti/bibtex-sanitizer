@@ -1,9 +1,9 @@
 from setuptools import setup
 
 setup(
-	name="bibtex-sanitizer",
+	name="bibtexsanitizer",
 	version="0.1",
-	packages=["bibtex-sanitizer"],
+	packages=["bibtexsanitizer"],
 
 	# dependencies
 	install_requires=[
