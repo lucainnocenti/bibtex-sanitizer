@@ -90,13 +90,52 @@ def _is_newstyle_arxiv_id(arxiv_number):
     raise ValueError('Not a proper arxiv id')
 
 
-def extract_fields_from_arxiv_query_result(result):
+def pull_info_from_doi(doi, accepted_fields=None):
+    """Pull down paper info using its DOI identifier."""
+    ans = sh.curl('-LH', r'Accept: text/bibliography; style=bibtex',
+                  r'http://dx.doi.org/' + doi)
+    ans = ans.stdout.decode('UTF-8')
+    if accepted_fields is None:
+        accepted_fields = ['title', 'volume', 'year', 'number', 'journal',
+                           'publisher', 'month', 'author']
+    details = {}
+    for field in accepted_fields:
+        value = re.search(field + r'={([^}]*)}', ans)
+        if value:
+            details[field] = value[1]
+    return details
+
+
+def pull_info_from_arxiv_id(arxiv_id, requested_fields=None, use_doi=True):
+    """Pull down paper info from arxiv id."""
+    ans = arxiv.query(id_list=[arxiv_id])
+    if not ans:
+        logging.warning('No paper found with the ID {}.'.format(arxiv_id))
+    ans = ans[0]
+    # extract fields
+    details = extract_fields_from_arxiv_query_result(
+        ans, requested_fields=requested_fields, use_doi=use_doi)
+    return details
+
+
+def extract_fields_from_arxiv_query_result(result, requested_fields=None,
+                                           use_doi=True):
+    """Take the answer of an arxiv query and extract relevant fields from it.
+    """
+    if requested_fields is None:
+        requested_fields = ['title', 'authors', 'doi', 'year']
     fields = dict()
-    # extract doi if there is one
-    if result['doi']:
-        print(result['id'], result['doi'])
-        fields['doi'] = result['doi']
-    # extract arxiv info
+    # extract generic fields
+    for field in requested_fields:
+        # the arxiv api calles the set of authors `authors`, while bibtex uses
+        # the key `author`
+        if field == 'authors':
+            fields['author'] = result[field]
+        elif field == 'year':
+            fields['year'] = str(result['published_parsed'][0])
+        else:
+            fields[field] = result[field]
+    # extract arxiv id info
     arxiv_number = re.search('arxiv.org/abs/([^v]*)', result['id']).group(1)
     newstyle = _is_newstyle_arxiv_id(arxiv_number)
     if newstyle:
@@ -109,6 +148,22 @@ def extract_fields_from_arxiv_query_result(result):
         fields.update(dict(
             eprint=arxiv_number
         ))
+    # if requested, try to use the doi to extract additional information
+    if use_doi and fields['doi']:
+        fields.update(pull_info_from_doi(fields['doi']))
+    else:
+        # if no doi is used, we need to reformat the `author` entry, to convert
+        # it from a list of authors to a single string with all the authors
+        authors = fields['author']
+        matcher = r'^([\w-]*) ([\w-]*)$'
+        for author in authors:
+            if not re.match(matcher, author):
+                raise ValueError("I'm not prepare to handle '{}'".format(
+                    author))
+        authors = [re.sub(matcher, r'\2, \1', author)
+                   for author in authors]
+        fields['author'] = ' and '.join(authors)
+    # return results
     return fields
 
 
@@ -178,29 +233,25 @@ def update_entry_from_doi(entry):
     """Refill entry fields using its DOI."""
     if 'doi' not in entry:
         return entry
-    ans = sh.curl('-LH', r'Accept: text/bibliography; style=bibtex',
-                  r'http://dx.doi.org/' + entry['doi']).stdout
-    ans = ans.decode('UTF-8')
     accepted_fields = ['title', 'volume', 'year', 'number', 'journal',
                        'publisher', 'month']
-    new_fields = {}
-    for field in accepted_fields:
-        value = re.search(field + r'={([^}]*)}', ans)
-        if value:
-            new_fields[field] = value[1]
+    new_fields = pull_info_from_doi(entry['doi'], accepted_fields)
     entry.update(new_fields)
     return entry
 
 
 def update_entries_from_doi(path_or_db):
+    # parsing input parameters
     if isinstance(path_or_db, str):
         path = path_or_db
         db = load_bibtex_database(path_or_db)
     else:
         path = None
         db = path_or_db
+    # doing the deed
     for entry in db.entries:
         update_entry_from_doi(entry)
+    # save or return result
     if path:
         save_bibtex_database_to_file(path, db)
     else:
@@ -240,38 +291,96 @@ def check_fields(path_or_db, fields=None):
                 print('{} is missing the {}'.format(entry['ID'], field))
 
 
+def make_id_for_entry(entry, style='gscholar'):
+    """Tale entry as a dict, and return an ID to use for the bib entry."""
+    if style != 'gscholar':
+        raise NotImplementedError('Not implemented yet.')
+    if not (entry['author'] and entry['title'] and entry['year']):
+        raise ValueError("author, title and year are required.")
+    title = entry['title']
+    year = entry['year']
+    author = entry['author'].split(',')[0].lower()
+    # extract first author
+    if author[0] == '{':
+        author = author[1:]
+    if author[-1] == '}':
+        author = author[:-1]
+    if ' ' in author:
+        author = author.split(' ')[0]
+    # extract first word
+    first_word = title.split(' ')[0].lower()
+    if first_word[0] == '{':
+        first_word = first_word[1:]
+    if first_word[-1] == '}':
+        first_word = first_word[:-1]
+    # build new id
+    newid = '{}{}{}'.format(author, year, first_word)
+    logging.info('New id: {}'.format(newid))
+    return newid
+
+
 def fix_ids_to_scholar_style(path):
     """Fix entries ids to match the google scholar format."""
     db = load_bibtex_database(path)
     for entry in db.entries:
         ID = entry['ID']
-        title = entry['title']
         scholar_style = re.match(r'[a-z]*[0-9]{4}[a-z]*$', ID)
         if not scholar_style:
             logging.info('Processing {}'.format(ID))
-            if 'year' not in entry:
-                raise ValueError('Need year field to set entry')
-            author = entry['author'].split(',')[0].lower()
-            # sometimes the author names are surrounded with brackets
-            if author[0] == '{':
-                author = author[1:]
-            if author[-1] == '}':
-                author = author[:-1]
-            # if there were spaces inside a bracket, remove them
-            if ' ' in author:
-                author = author.split(' ')[0]
-            year = entry['year']
-            first_word = title.split(' ')[0].lower()
-            if first_word[0] == '{':
-                first_word = first_word[1:]
-            if first_word[-1] == '}':
-                first_word = first_word[:-1]
-            newid = '{}{}{}'.format(author, year, first_word)
-            logging.info('New id: {}'.format(newid))
+            newid = make_id_for_entry(entry)
             # check that the new ID doesn't already exists
             if any(entry['ID'] == newid for entry in db.entries):
                 print(entry['ID'], newid)
-                raise ValueError(
-                    'There is already an entry with this ID, there may be something wrong!')
+                raise ValueError('There is already an entry with this ID, '
+                                 'there may be something wrong!')
             entry['ID'] = newid
     save_bibtex_database_to_file(path, db)
+
+
+def make_bibentry_from_arxiv_id(arxiv_id):
+    entry = pull_info_from_arxiv_id(arxiv_id)
+    entry['ENTRYTYPE'] = 'article'
+    entry['ID'] = make_id_for_entry(entry)
+    return entry
+
+
+def add_entry_from_arxiv_id(path_or_db, arxiv_id):
+    # parse input parameteres
+    if isinstance(path_or_db, str):
+        path = path_or_db
+        db = load_bibtex_database(path_or_db)
+    else:
+        path = None
+        db = path_or_db
+    # check whether entry already exists
+    for entry in db.entries:
+        if 'eprint' in entry and entry['eprint'] == arxiv_id:
+            logging.info('An entry with arxiv id {} already exists.'.format(
+                arxiv_id))
+            return db
+    # do the thing
+    newentry = make_bibentry_from_arxiv_id(arxiv_id)
+    db.entries.append(newentry)
+    # save or return output
+    if path:
+        save_bibtex_database_to_file(path, db)
+    else:
+        return db
+
+
+def add_entries_from_arxiv_ids(path_or_db, arxiv_ids):
+    # parse input parameteres
+    if isinstance(path_or_db, str):
+        path = path_or_db
+        db = load_bibtex_database(path_or_db)
+    else:
+        path = None
+        db = path_or_db
+    # do the thing
+    for arxiv_id in arxiv_ids:
+        db = add_entry_from_arxiv_id(db, arxiv_id)
+    # save or return result
+    if path:
+        save_bibtex_database_to_file(path, db)
+    else:
+        return db  
