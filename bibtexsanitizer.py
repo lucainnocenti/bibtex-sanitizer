@@ -97,12 +97,13 @@ def pull_info_from_doi(doi, accepted_fields=None):
     ans = ans.stdout.decode('UTF-8')
     if accepted_fields is None:
         accepted_fields = ['title', 'volume', 'year', 'number', 'journal',
-                           'publisher', 'month', 'author']
+                           'publisher', 'month', 'author', 'doi']
     details = {}
     for field in accepted_fields:
         value = re.search(field + r'={([^}]*)}', ans)
         if value:
             details[field] = value[1]
+    details['doi'] = doi
     return details
 
 
@@ -292,7 +293,7 @@ def check_fields(path_or_db, fields=None):
 
 
 def make_id_for_entry(entry, style='gscholar'):
-    """Tale entry as a dict, and return an ID to use for the bib entry."""
+    """Take entry as a dict, and return an ID to use for the bib entry."""
     if style != 'gscholar':
         raise NotImplementedError('Not implemented yet.')
     if not (entry['author'] and entry['title'] and entry['year']):
@@ -313,6 +314,8 @@ def make_id_for_entry(entry, style='gscholar'):
         first_word = first_word[1:]
     if first_word[-1] == '}':
         first_word = first_word[:-1]
+    if '-' in first_word:
+        first_word = first_word.split('-')[0]
     # build new id
     newid = '{}{}{}'.format(author, year, first_word)
     logging.info('New id: {}'.format(newid))
@@ -338,13 +341,23 @@ def fix_ids_to_scholar_style(path):
 
 
 def make_bibentry_from_arxiv_id(arxiv_id):
+    """Build bib entry from a single arxiv id."""
     entry = pull_info_from_arxiv_id(arxiv_id)
     entry['ENTRYTYPE'] = 'article'
     entry['ID'] = make_id_for_entry(entry)
     return entry
 
 
+def make_bibentry_from_doi(doi):
+    """Build bib entry from a single arxiv id."""
+    entry = pull_info_from_doi(doi)
+    entry['ENTRYTYPE'] = 'article'
+    entry['ID'] = make_id_for_entry(entry)
+    return entry
+
+
 def add_entry_from_arxiv_id(path_or_db, arxiv_id):
+    """Build entry corresponding to arxiv id, and add it to bib database."""
     # parse input parameteres
     if isinstance(path_or_db, str):
         path = path_or_db
@@ -352,6 +365,7 @@ def add_entry_from_arxiv_id(path_or_db, arxiv_id):
     else:
         path = None
         db = path_or_db
+    old_db = copy.deepcopy(db)
     # check whether entry already exists
     for entry in db.entries:
         if 'eprint' in entry and entry['eprint'] == arxiv_id:
@@ -360,15 +374,24 @@ def add_entry_from_arxiv_id(path_or_db, arxiv_id):
             return db
     # do the thing
     newentry = make_bibentry_from_arxiv_id(arxiv_id)
+    # empty fields will throw errors, so we remove them
+    if not newentry['doi']:
+        del newentry['doi']
+    # add new entry to database
     db.entries.append(newentry)
     # save or return output
     if path:
-        save_bibtex_database_to_file(path, db)
+        try:
+            save_bibtex_database_to_file(path, db)
+        except:
+            save_bibtex_database_to_file(path, old_db)
+            raise
     else:
         return db
 
 
 def add_entries_from_arxiv_ids(path_or_db, arxiv_ids):
+    """Take list of arxiv ids and build corresponding entries."""
     # parse input parameteres
     if isinstance(path_or_db, str):
         path = path_or_db
@@ -384,3 +407,27 @@ def add_entries_from_arxiv_ids(path_or_db, arxiv_ids):
         save_bibtex_database_to_file(path, db)
     else:
         return db  
+
+
+def add_entry_from_doi(path_or_db, doi):
+    # parse input parameteres
+    if isinstance(path_or_db, str):
+        path = path_or_db
+        db = load_bibtex_database(path_or_db)
+    else:
+        path = None
+        db = path_or_db
+    # check whether entry already exists
+    for entry in db.entries:
+        if 'doi' in entry and entry['doi'] == doi:
+            logging.info('An entry with doi {} already exists.'.format(doi))
+            return db
+    # do the thing
+    newentry = make_bibentry_from_doi(doi)
+    db.entries.append(newentry)
+    # save or return output
+    if path:
+        save_bibtex_database_to_file(path, db)
+    else:
+        return db
+
