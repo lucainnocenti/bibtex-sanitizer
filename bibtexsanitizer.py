@@ -25,14 +25,33 @@ def save_bibtex_database_to_file(path, db):
         f.write(writer.write(db))
 
 
-def find_entries_without_field(database, field):
+def _load_or_use(path_or_db):
+    """Load from file if input is a path, otherwise just use input as db."""
+    if isinstance(path_or_db, str):
+        path = path_or_db
+        db = load_bibtex_database(path)
+    else:
+        path = None
+        db = path_or_db
+    return (path, db)
+
+
+def _save_or_return(path_or_db, new_db):
+    """
+    If input was a string, save result to file, otherwise just return results.
+    """
+    if isinstance(path_or_db, str):
+        save_bibtex_database_to_file(path_or_db, new_db)
+        return None
+    else:
+        return new_db
+
+
+def find_entries_without_field(path_or_db, field):
     """Return entries without field."""
-    # if `database` is a string we assume it to be the path of the bib file
-    if isinstance(database, str):
-        database = load_bibtex_database(database)
-    # otherwise we assume `database` to be a bibtexparser database object
+    _, db = _load_or_use(path_or_db)
     lacking_entries = []
-    for entry in database.entries:
+    for entry in db.entries:
         if field not in entry:
             lacking_entries += [entry]
     return lacking_entries
@@ -351,7 +370,7 @@ def make_bibentry_from_arxiv_id(arxiv_id):
 
 
 def make_bibentry_from_doi(doi):
-    """Build bib entry from a single arxiv id."""
+    """Build bib entry from a DOI."""
     entry = pull_info_from_doi(doi)
     entry['ENTRYTYPE'] = 'article'
     entry['ID'] = make_id_for_entry(entry)
@@ -398,31 +417,17 @@ def add_entry_from_arxiv_id(path_or_db, arxiv_id, force=False):
 
 def add_entries_from_arxiv_ids(path_or_db, arxiv_ids):
     """Take list of arxiv ids and build corresponding entries."""
-    # parse input parameteres
-    if isinstance(path_or_db, str):
-        path = path_or_db
-        db = load_bibtex_database(path_or_db)
-    else:
-        path = None
-        db = path_or_db
+    _, db = _load_or_use(path_or_db)
     # do the thing
     for arxiv_id in arxiv_ids:
         db = add_entry_from_arxiv_id(db, arxiv_id)
     # save or return result
-    if path:
-        save_bibtex_database_to_file(path, db)
-    else:
-        return db  
+    _save_or_return(path_or_db, db)
 
 
 def add_entry_from_doi(path_or_db, doi):
-    # parse input parameteres
-    if isinstance(path_or_db, str):
-        path = path_or_db
-        db = load_bibtex_database(path_or_db)
-    else:
-        path = None
-        db = path_or_db
+    """Add an entry retrieved from a doi identifier."""
+    _, db = _load_or_use(path_or_db)
     # check whether entry already exists
     for entry in db.entries:
         if 'doi' in entry and entry['doi'] == doi:
@@ -432,8 +437,5 @@ def add_entry_from_doi(path_or_db, doi):
     newentry = make_bibentry_from_doi(doi)
     db.entries.append(newentry)
     # save or return output
-    if path:
-        save_bibtex_database_to_file(path, db)
-    else:
-        return db
+    _save_or_return(path_or_db, db)
 
