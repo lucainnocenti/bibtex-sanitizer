@@ -119,6 +119,16 @@ def pull_info_from_arxiv_id(arxiv_id, requested_fields=None, use_doi=True):
     return details
 
 
+def authors_list_to_string(authors):
+    """Take list of authors full names and return author string for bibtex."""
+    authors_strings = []
+    for author in authors:
+        names = author.split(' ')
+        last_name = names[-1]
+        authors_strings.append(last_name + ', ' + ' '.join(names[:-1]))
+    return ' and '.join(authors_strings)
+
+
 def extract_fields_from_arxiv_query_result(result, requested_fields=None,
                                            use_doi=True):
     """Take the answer of an arxiv query and extract relevant fields from it.
@@ -155,15 +165,7 @@ def extract_fields_from_arxiv_query_result(result, requested_fields=None,
     else:
         # if no doi is used, we need to reformat the `author` entry, to convert
         # it from a list of authors to a single string with all the authors
-        authors = fields['author']
-        matcher = r'^([\w-]*) ([\w-]*)$'
-        for author in authors:
-            if not re.match(matcher, author):
-                raise ValueError("I'm not prepare to handle '{}'".format(
-                    author))
-        authors = [re.sub(matcher, r'\2, \1', author)
-                   for author in authors]
-        fields['author'] = ' and '.join(authors)
+        fields['author'] = authors_list_to_string(fields['author'])
     # return results
     return fields
 
@@ -356,7 +358,7 @@ def make_bibentry_from_doi(doi):
     return entry
 
 
-def add_entry_from_arxiv_id(path_or_db, arxiv_id):
+def add_entry_from_arxiv_id(path_or_db, arxiv_id, force=False):
     """Build entry corresponding to arxiv id, and add it to bib database."""
     # parse input parameteres
     if isinstance(path_or_db, str):
@@ -367,11 +369,15 @@ def add_entry_from_arxiv_id(path_or_db, arxiv_id):
         db = path_or_db
     old_db = copy.deepcopy(db)
     # check whether entry already exists
-    for entry in db.entries:
-        if 'eprint' in entry and entry['eprint'] == arxiv_id:
-            logging.info('An entry with arxiv id {} already exists.'.format(
-                arxiv_id))
-            return db
+    if not force:
+        for entry in db.entries:
+            if 'eprint' in entry and entry['eprint'] == arxiv_id:
+                logging.info('An entry with arxiv id {} already exists.'.format(
+                    arxiv_id))
+                if path:
+                    return None
+                else:
+                    return db
     # do the thing
     newentry = make_bibentry_from_arxiv_id(arxiv_id)
     # empty fields will throw errors, so we remove them
