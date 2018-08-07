@@ -1,13 +1,15 @@
-import re
-from collections import OrderedDict
-from pprint import pprint
 import copy
 import logging
+import os
+import re
+import shutil
+from collections import OrderedDict
+from pprint import pprint
 
-import sh
 import arxiv
 import bibtexparser
 import pyparsing as pp
+import sh
 
 
 def load_bibtex_database(path):
@@ -29,6 +31,7 @@ def _load_or_use(path_or_db):
     """Load from file if input is a path, otherwise just use input as db."""
     if isinstance(path_or_db, str):
         path = path_or_db
+        shutil.copyfile(path, path + '.bak')
         db = load_bibtex_database(path)
     else:
         path = None
@@ -42,6 +45,7 @@ def _save_or_return(path_or_db, new_db):
     """
     if isinstance(path_or_db, str):
         save_bibtex_database_to_file(path_or_db, new_db)
+        os.remove(path_or_db + '.bak')
         return None
     else:
         return new_db
@@ -115,8 +119,8 @@ def pull_info_from_doi(doi, accepted_fields=None):
                   r'http://dx.doi.org/' + doi)
     ans = ans.stdout.decode('UTF-8')
     if accepted_fields is None:
-        accepted_fields = ['title', 'volume', 'year', 'number', 'journal',
-                           'publisher', 'month', 'author', 'doi']
+        accepted_fields = ['title', 'year', 'volume', 'number', 'pages',
+                           'journal', 'publisher', 'month', 'author', 'doi']
     details = {}
     for field in accepted_fields:
         value = re.search(field + r'={([^}]*)}', ans)
@@ -186,6 +190,8 @@ def extract_fields_from_arxiv_query_result(result, requested_fields=None,
         # it from a list of authors to a single string with all the authors
         fields['author'] = authors_list_to_string(fields['author'])
     # return results
+    if not fields['doi']:
+        del fields['doi']
     return fields
 
 
@@ -377,16 +383,44 @@ def make_bibentry_from_doi(doi):
     return entry
 
 
+def _print_bibtex_string_from_entries(entries):
+    # build the db using the entries
+    db = bibtexparser.bibdatabase.BibDatabase()
+    db.entries = entries
+    # prepare and print results
+    writer = bibtexparser.bwriter.BibTexWriter()
+    writer.indent = '    '
+    return writer.write(db)
+
+
+def get_bibentry_from_arxiv_id(arxiv_ids):
+    """Return the bibtex entry corresponding to an arxiv id as a string."""
+    if isinstance(arxiv_ids, str):
+        entries = [make_bibentry_from_arxiv_id(arxiv_ids)]
+    else:
+        entries = []
+        for arxiv_id in arxiv_ids:
+            entries.append(make_bibentry_from_arxiv_id(arxiv_id))
+    # build the db using the entries
+    return _print_bibtex_string_from_entries(entries)
+
+
+def get_bibentry_from_doi(dois):
+    """Return the bibtex entry corresponding to the given doi, as a string."""
+    if isinstance(dois, str):
+        entries = [make_bibentry_from_doi(dois)]
+    else:
+        entries = []
+        for doi in dois:
+            entries.append(make_bibentry_from_doi(doi))
+    # build the db using the entries
+    return _print_bibtex_string_from_entries(entries)
+
+
 def add_entry_from_arxiv_id(path_or_db, arxiv_id, force=False):
     """Build entry corresponding to arxiv id, and add it to bib database."""
     # parse input parameteres
-    if isinstance(path_or_db, str):
-        path = path_or_db
-        db = load_bibtex_database(path_or_db)
-    else:
-        path = None
-        db = path_or_db
-    old_db = copy.deepcopy(db)
+    path, db = _load_or_use(path_or_db)
     # check whether entry already exists
     if not force:
         for entry in db.entries:
@@ -400,19 +434,12 @@ def add_entry_from_arxiv_id(path_or_db, arxiv_id, force=False):
     # do the thing
     newentry = make_bibentry_from_arxiv_id(arxiv_id)
     # empty fields will throw errors, so we remove them
-    if not newentry['doi']:
-        del newentry['doi']
+    # if not newentry['doi']:
+    #     del newentry['doi']
     # add new entry to database
     db.entries.append(newentry)
     # save or return output
-    if path:
-        try:
-            save_bibtex_database_to_file(path, db)
-        except:
-            save_bibtex_database_to_file(path, old_db)
-            raise
-    else:
-        return db
+    return _save_or_return(path_or_db, db)
 
 
 def add_entries_from_arxiv_ids(path_or_db, arxiv_ids):
@@ -438,4 +465,3 @@ def add_entry_from_doi(path_or_db, doi):
     db.entries.append(newentry)
     # save or return output
     _save_or_return(path_or_db, db)
-
