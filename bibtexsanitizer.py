@@ -51,6 +51,25 @@ def _save_or_return(path_or_db, new_db):
         return new_db
 
 
+def fix_bibtex_syntax(path, make_backup=True):
+    """Fix bad fields in bib file."""
+    with open(path, encoding='utf-8') as f:
+        text = f.read()
+    if make_backup:
+        shutil.copyfile(path, path + '.old')
+    # fix fields without curly braces for value
+    newtext = re.sub(r'([a-z]*)\s*=\s*([^\s{].*)(,\n|\s*})',
+                     r'\1 = {\2}\3',
+                     text)
+    # fix title fields with double curly braces
+    newtext = re.sub(r'title\s*=\s*{{([^}]*)}}(,\s*\n|\s*})',
+                     r'title = {\1}\2',
+                     newtext)
+    # save results
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(newtext)
+
+
 def find_entries_without_field(path_or_db, field):
     """Return entries without field."""
     _, db = _load_or_use(path_or_db)
@@ -83,25 +102,6 @@ def remove_field_from_all_entries(path_or_db, fields):
         save_bibtex_database_to_file(path, database)
     else:
         return database
-
-
-def fix_records_without_brackets(path):
-    """Fix bad fields in bib file."""
-    # Records sometimes do not include parenthesis, which trips bibtexparser up,
-    # this fixes these entries
-    with open(path, encoding='utf-8') as f:
-        text = f.read()
-    newtext = re.sub(r'\s?([a-z]*)\s?=\s?([0-9a-z]*),',
-                     r'    \1 = {\2},',
-                     text)
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(newtext)
-
-
-def reformat_file(path):
-    """Load and resave file, fixing some formatting issues in the process."""
-    bib_database = load_bibtex_database(path)
-    save_bibtex_database_to_file(path, bib_database)
 
 
 def _is_newstyle_arxiv_id(arxiv_number):
@@ -257,7 +257,7 @@ def fill_bibdatabase_arxiv_entries(db, max_processed_entries=None, force=False):
                 return
 
 
-def update_entry_from_doi(entry):
+def _update_entry_from_doi(entry):
     """Refill entry fields using its DOI."""
     if 'doi' not in entry:
         return entry
@@ -270,20 +270,12 @@ def update_entry_from_doi(entry):
 
 def update_entries_from_doi(path_or_db):
     # parsing input parameters
-    if isinstance(path_or_db, str):
-        path = path_or_db
-        db = load_bibtex_database(path_or_db)
-    else:
-        path = None
-        db = path_or_db
+    _, db = _load_or_use(path_or_db)
     # doing the deed
     for entry in db.entries:
-        update_entry_from_doi(entry)
+        _update_entry_from_doi(entry)
     # save or return result
-    if path:
-        save_bibtex_database_to_file(path, db)
-    else:
-        return db
+    return _save_or_return(path_or_db, db)
 
 
 def check_id_style(path_or_db, style='gscholar'):
@@ -433,9 +425,6 @@ def add_entry_from_arxiv_id(path_or_db, arxiv_id, force=False):
                     return db
     # do the thing
     newentry = make_bibentry_from_arxiv_id(arxiv_id)
-    # empty fields will throw errors, so we remove them
-    # if not newentry['doi']:
-    #     del newentry['doi']
     # add new entry to database
     db.entries.append(newentry)
     # save or return output

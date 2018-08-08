@@ -2,6 +2,7 @@
 import argparse
 import glob
 import os
+import logging
 
 import arxiv
 import bibtexparser
@@ -32,6 +33,12 @@ def _print_reference(from_where, identifier):
         raise NotImplementedError('To Be Done.')
 
 
+def _fix_bibfile(bibfile, method):
+    if method != 'all':
+        raise NotImplementedError('Just use `all` for now')
+    bibtexsanitizer.fix_bibtex_syntax(bibfile)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Manage bib files.')
     parser.add_argument('--bibfile', type=str, default='')
@@ -42,15 +49,21 @@ if __name__ == '__main__':
     parser_add.add_argument('where', type=str)
     parser_add.add_argument('ids', nargs='*')
     parser_add.add_argument('--action', type=str, default='add')
-    # parser for print comments
+    # parser for print command
     parser_print = subparsers.add_parser(
         'print', help='Print to terminal the bibtex entry.')
     parser_print.add_argument('where', type=str)
     parser_print.add_argument('ids', nargs='*')
     parser_print.add_argument('--action', type=str, default='print')
+    # parser for fix command
+    parser_fix = subparsers.add_parser(
+        'fix', help='Fix badly formatted bib files.')
+    parser_fix.add_argument('method', type=str, nargs='?', default='all')
+    parser_fix.add_argument('--action', type=str, default='fix')
+
     args = parser.parse_args()
     # decide where to save stuff, if needed
-    if not args.bibfile and args.action == 'add':
+    if not args.bibfile and (args.action == 'add' or args.action == 'fix'):
         bibfiles = glob.glob('./*.bib')
         if not bibfiles:
             raise ValueError(
@@ -69,5 +82,7 @@ if __name__ == '__main__':
         _add_reference(bibfile, args.where, args.ids)
     elif args.action == 'print':
         _print_reference(args.where, args.ids)
+    elif args.action == 'fix':
+        _fix_bibfile(bibfile, args.method)
     else:
         raise ValueError('Unknown action.')
