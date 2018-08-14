@@ -2,12 +2,21 @@
 import argparse
 import glob
 import os
+import re
 import logging
 
 import arxiv
 import bibtexparser
 
 import bibtexsanitizer
+
+
+# initialize logging
+logger = logging.getLogger('pybib')
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+logger.addHandler(ch)
 
 
 def _add_reference_from_arxiv_id(bibfile, arxiv_ids):
@@ -21,12 +30,20 @@ def _add_reference(bibfile, from_where, ids):
     if from_where == 'arxiv':
         _add_reference_from_arxiv_id(bibfile, ids)
     else:
-        raise ValueError('`{}` is not an acceptable command.'.format(from_where))
+        raise ValueError(
+            '`{}` is not an acceptable command.'.format(from_where))
 
 
 def _print_reference(from_where, identifier):
     if from_where == 'arxiv':
-        print(bibtexsanitizer.get_bibentry_from_arxiv_id(identifier))
+        ids = []
+        for id_ in identifier:
+            if re.match(r'.*/(?:pdf|abs)/[0-9]+\.[0-9]+.*', id_):
+                trueid = re.findall(r'.*/(?:pdf|abs)/([0-9]+\.[0-9]+).*', id_)[0]
+                ids.append(trueid)
+            else:
+                ids.append(id_)
+        print(bibtexsanitizer.get_bibentry_from_arxiv_id(ids))
     elif from_where == 'doi':
         print(bibtexsanitizer.get_bibentry_from_doi(identifier))
     else:
@@ -37,6 +54,25 @@ def _fix_bibfile(bibfile, method):
     if method != 'all':
         raise NotImplementedError('Just use `all` for now')
     bibtexsanitizer.fix_bibtex_syntax(bibfile)
+
+
+def _check_references(bibfile, what):
+    if what == 'published':
+        # check whether the entries with an arxiv id are associated with a
+        # published journal
+        db = bibtexsanitizer.load_bibtex_database(bibfile)
+        for entry in db.entries:
+            if (('journal' not in entry or 'doi' not in entry)
+                    and 'eprint' in entry):
+                details = bibtexsanitizer.pull_info_from_arxiv_id(
+                    entry['eprint'])
+                if 'doi' in details and 'doi' not in entry:
+                    logger.info('Adding doi for {}'.format(entry['ID']))
+                    entry['doi'] = details['doi']
+                if 'journal' in details and 'journal' not in entry:
+                    logger.info('Adding journal for {}'.format(entry['ID']))
+                    entry['journal'] = details['journal']
+        bibtexsanitizer.save_bibtex_database_to_file(bibfile, db)
 
 
 if __name__ == '__main__':
@@ -60,10 +96,20 @@ if __name__ == '__main__':
         'fix', help='Fix badly formatted bib files.')
     parser_fix.add_argument('method', type=str, nargs='?', default='all')
     parser_fix.add_argument('--action', type=str, default='fix')
-
+    # parser for check command
+    parser_check = subparsers.add_parser(
+        'check', help='Check completeness of fields and other stuff.')
+    parser_check.add_argument('what', type=str)
+    parser_check.add_argument('--action', type=str, default='check')
+    # parse the whole thing
     args = parser.parse_args()
+    # the action argument must be defined
+    if 'action' not in args:
+        print('Run pybib -h for syntax help.')
+        raise SystemExit()
     # decide where to save stuff, if needed
-    if not args.bibfile and (args.action == 'add' or args.action == 'fix'):
+    if not args.bibfile and (args.action == 'add' or args.action == 'fix' or
+                             args.action == 'check'):
         bibfiles = glob.glob('./*.bib')
         if not bibfiles:
             raise ValueError(
@@ -84,5 +130,7 @@ if __name__ == '__main__':
         _print_reference(args.where, args.ids)
     elif args.action == 'fix':
         _fix_bibfile(bibfile, args.method)
+    elif args.action == 'check':
+        _check_references(bibfile, args.what)
     else:
         raise ValueError('Unknown action.')
