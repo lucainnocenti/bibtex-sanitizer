@@ -19,6 +19,38 @@ ch.setLevel(logging.DEBUG)
 logger.addHandler(ch)
 
 
+class Re:
+    """Simple class to facilitate cascading through re.math expressions."""
+    def __init__(self):
+        self.last_match = None
+
+    def match(self, pattern, text, *args):
+        self.last_match = re.match(pattern, text, *args)
+        return self.last_match
+
+    def search(self, pattern, text, *args):
+        self.last_match = re.search(pattern, text, *args)
+        return self.last_match    
+
+
+def _extract_arxiv_id_from_url(string):
+    gre = Re()
+    # if already well formatted return untouched
+    if gre.match(r'^[0-9]{4}\.[0-9]*$', string):
+        return gre.last_match.group(1)
+    # if the full new-style string was given, return id part
+    elif gre.match(r'.*(?:pdf|abs)/([0-9]{4}\.[0-9]+).*', string):
+        return gre.last_match.group(1)
+    # old style string
+    elif gre.match(r'.*(?:pdf|abs)/([a-zA-Z-]*/[0-9]*).*', string):
+        return gre.last_match.group(1)
+    # strings of the form arxiv:id
+    elif gre.match(r'.*arxiv:([0-9]{4}\.[0-9]{4,5}).*', string, re.IGNORECASE):
+        return gre.last_match.group(1)
+    else:
+        raise NotImplementedError('Unrecognised format')
+
+
 def _add_reference_from_arxiv_id(bibfile, arxiv_ids):
     if isinstance(arxiv_ids, str):
         bibtexsanitizer.add_entry_from_arxiv_id(bibfile, arxiv_ids)
@@ -28,24 +60,19 @@ def _add_reference_from_arxiv_id(bibfile, arxiv_ids):
 
 def _add_reference(bibfile, from_where, ids):
     if from_where == 'arxiv':
+        ids = [_extract_arxiv_id_from_url(id_) for id_ in ids]
         _add_reference_from_arxiv_id(bibfile, ids)
     else:
         raise ValueError(
             '`{}` is not an acceptable command.'.format(from_where))
 
 
-def _print_reference(from_where, identifier):
+def _print_reference(from_where, identifiers):
     if from_where == 'arxiv':
-        ids = []
-        for id_ in identifier:
-            if re.match(r'.*/(?:pdf|abs)/[0-9]+\.[0-9]+.*', id_):
-                trueid = re.findall(r'.*/(?:pdf|abs)/([0-9]+\.[0-9]+).*', id_)[0]
-                ids.append(trueid)
-            else:
-                ids.append(id_)
+        ids = [_extract_arxiv_id_from_url(id_) for id_ in identifiers]
         print(bibtexsanitizer.get_bibentry_from_arxiv_id(ids))
     elif from_where == 'doi':
-        print(bibtexsanitizer.get_bibentry_from_doi(identifier))
+        print(bibtexsanitizer.get_bibentry_from_doi(identifiers))
     else:
         raise NotImplementedError('To Be Done.')
 

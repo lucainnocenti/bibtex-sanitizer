@@ -119,7 +119,7 @@ def pull_info_from_doi(doi, accepted_fields=None):
                   r'http://dx.doi.org/' + doi)
     ans = ans.stdout.decode('UTF-8')
     if accepted_fields is None:
-        accepted_fields = ['title', 'year', 'volume', 'number', 'pages',
+        accepted_fields = ['title', 'year', 'volume', 'number', 'pages', 'ISBN',
                            'journal', 'publisher', 'month', 'author', 'doi']
     details = {}
     for field in accepted_fields:
@@ -139,6 +139,21 @@ def pull_info_from_arxiv_id(arxiv_id, requested_fields=None, use_doi=True):
     # extract fields
     details = extract_fields_from_arxiv_query_result(
         ans, requested_fields=requested_fields, use_doi=use_doi)
+    return details
+
+
+def pull_info_from_gscholar(query, accepted_fields=None):
+    """Look for entry in google scholar."""
+    import gscholar
+    bibtex_string = gscholar.query(query)[0]
+    if accepted_fields is None:
+        accepted_fields = ['title', 'year', 'volume', 'number', 'pages', 'ISBN',
+                           'journal', 'publisher', 'month', 'author', 'doi']
+    details = {}
+    for field in accepted_fields:
+        value = re.search(field + r'={([^}]*)}', bibtex_string)
+        if value:
+            details[field] = value[1]
     return details
 
 
@@ -315,8 +330,24 @@ def make_id_for_entry(entry, style='gscholar'):
     """Take entry as a dict, and return an ID to use for the bib entry."""
     if style != 'gscholar':
         raise NotImplementedError('Not implemented yet.')
-    if not (entry['author'] and entry['title'] and entry['year']):
-        raise ValueError("author, title and year are required.")
+    try:
+        entry['title']
+    except KeyError:
+        raise ValueError('No dice without a title!')
+    try:
+        entry['author']
+        entry['year']
+    except KeyError:
+        # try to pull down additional information from google scholar
+        logging.info('I could not find author/year information from DOI/arxiv,'
+                     ' attempting to pull information down from gscholar.')
+        gscholar_result = pull_info_from_gscholar(
+            entry['title'], accepted_fields=['author', 'year'])
+        if 'author' in gscholar_result and 'year' in gscholar_result:
+            logging.info('Author/year information pulled from scholar.')
+            entry.update(gscholar_result)
+        else:
+            raise ValueError("author, title and year are required.")
     title = entry['title']
     year = entry['year']
     author = entry['author'].split(',')[0].lower()
