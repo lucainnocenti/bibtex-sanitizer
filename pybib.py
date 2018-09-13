@@ -44,8 +44,8 @@ def _extract_arxiv_id_from_url(string):
     # old style string
     elif gre.match(r'.*(?:pdf|abs)/([a-zA-Z-]*/[0-9]*).*', string):
         return gre.last_match.group(1)
-    # strings of the form arxiv:id
-    elif gre.match(r'.*arxiv:([0-9]{4}\.[0-9]{4,5}).*', string, re.IGNORECASE):
+    # strings of the form arxiv:id or arxiv/id
+    elif gre.match(r'.*arxiv(?::|/)([0-9]{4}\.[0-9]{4,5}).*', string, re.IGNORECASE):
         return gre.last_match.group(1)
     else:
         raise NotImplementedError('Unrecognised format')
