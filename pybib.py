@@ -4,6 +4,7 @@ import glob
 import os
 import re
 import logging
+import pyperclip
 
 import arxiv
 import bibtexparser
@@ -70,12 +71,15 @@ def _add_reference(bibfile, from_where, ids):
 def _print_reference(from_where, identifiers):
     if from_where == 'arxiv':
         ids = [_extract_arxiv_id_from_url(id_) for id_ in identifiers]
-        print(bibtexsanitizer.get_bibentry_from_arxiv_id(ids))
+        output = bibtexsanitizer.get_bibentry_from_arxiv_id(ids)
     elif from_where == 'doi':
-        print(bibtexsanitizer.get_bibentry_from_doi(identifiers))
+        output = bibtexsanitizer.get_bibentry_from_doi(identifiers)
     else:
         raise NotImplementedError('To Be Done.')
-
+    # copy to clipboard
+    pyperclip.copy(output)
+    # print to console
+    print(output)
 
 def _fix_bibfile(bibfile, method):
     if method != 'all':
