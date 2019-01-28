@@ -51,7 +51,7 @@ def _save_or_return(path_or_db, new_db):
         return new_db
 
 
-def fix_bibtex_syntax(path, make_backup=True):
+def fix_bibtex_syntax(path, make_backup=True, method='all'):
     """Fix bad fields in bib file."""
     with open(path, encoding='utf-8') as f:
         text = f.read()
@@ -68,6 +68,10 @@ def fix_bibtex_syntax(path, make_backup=True):
     # save results
     with open(path, 'w', encoding='utf-8') as f:
         f.write(newtext)
+    # do addition house cleaning
+    if method == 'all':
+        remove_field_from_all_entries(path, ['file', 'abstract', 'arxivid'])
+        check_arxiv_fields_consistency(path, fix=True)
 
 
 def find_entries_without_field(path_or_db, field):
@@ -294,23 +298,105 @@ def update_entries_from_doi(path_or_db):
 
 
 def check_id_style(path_or_db, style='gscholar'):
+    """Makes sure that all entries' ids follows the correct style."""
     if isinstance(path_or_db, str):
         db = load_bibtex_database(path_or_db)
     else:
         db = path_or_db
 
     if style != 'gscholar':
-        raise ValueError('Only google scholar style works for now.')
-    everything_good = True
+        raise ValueError('Only google scholar style supported at the moment.')
+    all_good = True
     for entry in db.entries:
         ID = entry['ID']
         if style == 'gscholar':
             matcher = re.compile(r'[a-z]*[0-9]{4}[a-z]*$')
         match = matcher.match(ID)
         if not match:
-            everything_good = False
+            all_good = False
             print('{} does not match the ID style.'.format(ID))
-    return everything_good
+    return all_good
+
+
+def _fix_key_casing(entry, correct_string):
+    if correct_string in entry:
+        return None
+
+    wrong_key = None
+    for key in entry.keys():
+        if key.lower() == correct_string.lower():
+            wrong_key = key
+    # is an incorrectly cased key was indeed found, amend the mistake
+    if wrong_key is not None:
+        entry[correct_string] = entry[wrong_key]
+        del entry[wrong_key]
+    # return result
+    return entry
+
+
+def check_arxiv_fields_consistency(path_or_db, fix=True, assume_arxiv=True, assume_quantph=True):
+    """Makes sure that all arxiv entries follow the correct format.
+
+    The correct format is here assumed to be:
+    1) For new-style eprints:
+        archivePrefix = {arXiv},
+        eprint = {0902.0885},
+        primaryClass = {quant-ph}
+    2) For old-style eprints:
+        archivePrefix = {arXiv},
+        eprint = {quant-ph/0401062}
+
+
+    If the `fix` parameter is given, attempts are made to fix inconsistencies.
+
+    The `assume_arxiv` parameter has the parser assume that all eprint entries are
+    supposed to refer to arxiv eprints.
+
+    If assume_quantph is True then the primaryClass will be automatically set to quant-ph, if missing.
+    """
+    path, db = _load_or_use(path_or_db)
+
+    for entry in db.entries:
+        # sometimes the 'archivePrefix' and 'primaryClass' entries exist but are not properly cased. Fix this
+        entry = _fix_key_casing(entry, 'archivePrefix')
+        entry = _fix_key_casing(entry, 'primaryClass')
+        # if there is a 'eprint' entry but not a 'archivePrefix' one, things
+        # are probably wrong
+        if 'eprint' in entry and 'archivePrefix' not in entry:
+            if not assume_arxiv:
+                print("The entry '{}' is probably missing the 'archivePrefix' field."
+                      " (has to be fixed manually).".format(entry['ID']))
+            else:
+                print("Adding 'archivePrefix' field to the entry '{}'".format(
+                    entry['ID']))
+                entry['archivePrefix'] = 'arXiv'
+        # if the archivePrefix field is given and indicating an arxiv entry...
+        if 'archivePrefix' in entry and entry['archivePrefix'] == 'arXiv':
+            if 'eprint' not in entry:
+                print("The entry '{}' is missing the 'eprint' field."
+                      " (has to be fixed manually).".format(entry['ID']))
+            else:
+                arxiv_entry_style = None
+                # check correct format of the eprint entry
+                if re.match(r'[0-9]{4}\.[0-9]{4,5}$', entry['eprint']):
+                    arxiv_entry_style = 'new'
+                    if 'primaryClass' not in entry and not assume_quantph:
+                        print("The entry '{}' is missing the 'primaryClass' field"
+                              " (has to be fixed manually).".format(entry['ID']))
+                    elif 'primaryClass' not in entry and assume_quantph:
+                        print("Adding 'quant-ph' as primaryClass for the '{}' entry.".format(
+                            entry['ID']))
+                        entry['primaryClass'] = 'quant-ph'
+                elif re.match(r'[a-z-]+/[0-9]+$', entry['eprint']):
+                    arxiv_entry_style = 'old'
+                    if 'primaryClass' in entry:
+                        print("The entry '{}' should NOT have a 'primaryClass' field"
+                              " (has to be fixed manually).".format(entry['ID']))
+                else:
+                    print("The entry '{}' is using an incorrectly formatted 'eprint' field"
+                          " (has to be fixed manually).".format(entry['ID']))
+
+    return _save_or_return(path_or_db, db)
 
 
 def check_fields(path_or_db, fields=None):

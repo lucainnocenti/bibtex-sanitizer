@@ -84,7 +84,7 @@ def _print_reference(from_where, identifiers):
 def _fix_bibfile(bibfile, method):
     if method != 'all':
         raise NotImplementedError('Just use `all` for now')
-    bibtexsanitizer.fix_bibtex_syntax(bibfile)
+    bibtexsanitizer.fix_bibtex_syntax(bibfile, make_backup=True, method=method)
 
 
 def _check_references(bibfile, what):
