@@ -33,6 +33,15 @@ class Re:
         self.last_match = re.search(pattern, text, *args)
         return self.last_match    
 
+def _extract_doi_from_url(string):
+    # CONTINUE FROM HERE
+    gre = Re()
+    # strip initial url part, if present
+    if gre.match(r'.*(?:doi\.org/)(.*)', string):
+        return gre.last_match.group(1)
+    else:
+        return string
+
 
 def _extract_arxiv_id_from_url(string):
     gre = Re()
@@ -73,7 +82,8 @@ def _print_reference(from_where, identifiers):
         ids = [_extract_arxiv_id_from_url(id_) for id_ in identifiers]
         output = bibtexsanitizer.get_bibentry_from_arxiv_id(ids)
     elif from_where == 'doi':
-        output = bibtexsanitizer.get_bibentry_from_doi(identifiers)
+        ids = [_extract_doi_from_url(id_) for id_ in identifiers]
+        output = bibtexsanitizer.get_bibentry_from_doi(ids)
     else:
         raise NotImplementedError('To Be Done.')
     # copy to clipboard
