@@ -21,7 +21,7 @@ logger.addHandler(ch)
 
 
 class Re:
-    """Simple class to facilitate cascading through re.math expressions."""
+    """Simple class to facilitate cascading through re.match expressions."""
     def __init__(self):
         self.last_match = None
 
@@ -46,7 +46,7 @@ def _extract_doi_from_url(string):
 def _extract_arxiv_id_from_url(string):
     gre = Re()
     # if already well formatted return untouched
-    if gre.match(r'^[0-9]{4}\.[0-9]*$', string):
+    if gre.match(r'(^[0-9]{4}\.[0-9]+$)', string):
         return gre.last_match.group(1)
     # if the full new-style string was given, return id part
     elif gre.match(r'.*(?:pdf|abs)/([0-9]{4}\.[0-9]+).*', string):
@@ -94,7 +94,7 @@ def _print_reference(from_where, identifiers):
 def _fix_bibfile(bibfile, method):
     if method != 'all':
         raise NotImplementedError('Just use `all` for now')
-    bibtexsanitizer.fix_bibtex_syntax(bibfile)
+    bibtexsanitizer.fix_bibtex_syntax(bibfile, make_backup=True, method=method)
 
 
 def _check_references(bibfile, what):
