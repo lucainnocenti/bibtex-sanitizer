@@ -11,6 +11,17 @@ import bibtexparser
 import pyparsing as pp
 import sh
 
+# initialize logging
+logger = logging.getLogger('bibtexsanitizer')
+logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+logger.addHandler(ch)
+
+
+class DOIError(Exception):
+    pass
+
 
 def load_bibtex_database(path):
     """Read .bib file and parse it using bibtexparser."""
@@ -138,7 +149,7 @@ def pull_info_from_arxiv_id(arxiv_id, requested_fields=None, use_doi=True):
     """Pull down paper info from arxiv id."""
     ans = arxiv.query(id_list=[arxiv_id])
     if not ans:
-        logging.warning('No paper found with the ID {}.'.format(arxiv_id))
+        logger.warning('No paper found with the ID {}.'.format(arxiv_id))
     ans = ans[0]
     # extract fields
     details = extract_fields_from_arxiv_query_result(
@@ -254,19 +265,19 @@ def fill_bibdatabase_arxiv_entries(db, max_processed_entries=None, force=False):
         # if we get more than one answer from the arxiv, we look for one with
         # an exactly matching title. If none is found, do nothing.
         if len(answers) > 1:
-            logging.info('{}: Found more than one result'.format(entry['ID']))
+            logger.info('{}: Found more than one result'.format(entry['ID']))
             for ans in answers:
                 if ans['title'] == entry['title']:
                     answer = [ans]
                 else:
                     continue
         elif len(answers) == 0:
-            logging.info('{}: No results'.format(entry['ID']))
+            logger.info('{}: No results'.format(entry['ID']))
             continue
         answer = answers[0]
         fields_to_add = extract_fields_from_arxiv_query_result(answer)
         entry.update(fields_to_add)
-        logging.info('Updated {}'.format(entry['ID']))
+        logger.info('Updated {}'.format(entry['ID']))
         # abort if maximum number of entries to process has been reached
         if max_processed_entries is not None:
             num_processed_entries += 1
@@ -419,21 +430,21 @@ def make_id_for_entry(entry, style='gscholar'):
     try:
         entry['title']
     except KeyError:
-        raise ValueError('No dice without a title!')
+        raise KeyError('No dice without a title!')
     try:
         entry['author']
         entry['year']
     except KeyError:
         # try to pull down additional information from google scholar
-        logging.info('I could not find author/year information from DOI/arxiv,'
+        logger.info('I could not find author/year information from DOI/arxiv,'
                      ' attempting to pull information down from gscholar.')
         gscholar_result = pull_info_from_gscholar(
             entry['title'], accepted_fields=['author', 'year'])
         if 'author' in gscholar_result and 'year' in gscholar_result:
-            logging.info('Author/year information pulled from scholar.')
+            logger.info('Author/year information pulled from scholar.')
             entry.update(gscholar_result)
         else:
-            raise ValueError("author, title and year are required.")
+            raise KeyError("author, title and year are required.")
     title = entry['title']
     year = entry['year']
     author = entry['author'].split(',')[0].lower()
@@ -454,7 +465,7 @@ def make_id_for_entry(entry, style='gscholar'):
         first_word = first_word.split('-')[0]
     # build new id
     newid = '{}{}{}'.format(author, year, first_word)
-    logging.info('New id: {}'.format(newid))
+    logger.info('New id for the given entry: {}'.format(newid))
     return newid
 
 
@@ -465,7 +476,7 @@ def fix_ids_to_scholar_style(path):
         ID = entry['ID']
         scholar_style = re.match(r'[a-z]*[0-9]{4}[a-z]*$', ID)
         if not scholar_style:
-            logging.info('Processing {}'.format(ID))
+            logger.info('Processing {}'.format(ID))
             newid = make_id_for_entry(entry)
             # check that the new ID doesn't already exists
             if any(entry['ID'] == newid for entry in db.entries):
@@ -488,7 +499,15 @@ def make_bibentry_from_doi(doi):
     """Build bib entry from a DOI."""
     entry = pull_info_from_doi(doi)
     entry['ENTRYTYPE'] = 'article'
-    entry['ID'] = make_id_for_entry(entry)
+    try:
+        entry['ID'] = make_id_for_entry(entry)
+    except DOIError:
+        logger.debug('Full entry:')
+        logger.debug(entry)
+        raise DOIError('Something went wrong while fetching'
+                         ' the id to use for the doi "{}". Probably,'
+                         ' the DOI database does not hold enough information'
+                         ' about the paper (it often lacks a title).'.format(doi))
     return entry
 
 
@@ -517,10 +536,12 @@ def get_bibentry_from_arxiv_id(arxiv_ids):
 def get_bibentry_from_doi(dois):
     """Return the bibtex entry corresponding to the given doi, as a string."""
     if isinstance(dois, str):
+        logger.info('Making bib entry for the doi "{}"'.format(dois))
         entries = [make_bibentry_from_doi(dois)]
     else:
         entries = []
         for doi in dois:
+            logger.info('Making bib entry for the doi "{}"'.format(doi))
             entries.append(make_bibentry_from_doi(doi))
     # build the db using the entries
     return _print_bibtex_string_from_entries(entries)
@@ -534,7 +555,7 @@ def add_entry_from_arxiv_id(path_or_db, arxiv_id, force=False):
     if not force:
         for entry in db.entries:
             if 'eprint' in entry and entry['eprint'] == arxiv_id:
-                logging.info('An entry with arxiv id {} already exists.'.format(
+                logger.info('An entry with arxiv id {} already exists.'.format(
                     arxiv_id))
                 if path:
                     return None
@@ -564,7 +585,7 @@ def add_entry_from_doi(path_or_db, doi):
     # check whether entry already exists
     for entry in db.entries:
         if 'doi' in entry and entry['doi'] == doi:
-            logging.info('An entry with doi {} already exists.'.format(doi))
+            logger.info('An entry with doi {} already exists.'.format(doi))
             return db
     # do the thing
     newentry = make_bibentry_from_doi(doi)

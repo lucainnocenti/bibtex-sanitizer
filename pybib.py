@@ -38,7 +38,7 @@ def _extract_doi_from_url(string):
     # strip initial url part, if present
     if gre.match(r'.*(?:doi\.org/)(.*)', string):
         return gre.last_match.group(1)
-    elif gre.match(r'.*([0-9]{2}\.[0-9]{4}.*)', string):
+    elif gre.match(r'.*?([0-9]{2}\.[0-9]{4,5}.*)', string):
         # e.g. revmodphys has these kinds of urls
         return gre.last_match.group(1)
     else:
