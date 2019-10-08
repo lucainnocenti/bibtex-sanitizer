@@ -44,3 +44,8 @@ Print and copy to clipboard entry from arxiv url (you don't need to use the full
 ```bash
 pybib print arxiv https://arxiv.org/pdf/1803.07119.pdf
 ```
+
+Build bibtex entries from a series of DOIs and put them in a file:
+```bash
+pybib print doi 10.1103/PhysRevLett.122.020503 10.1103/PhysRevA.96.062326 10.1088/1367-2630/aaad92 > file.bib
+```
