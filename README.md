@@ -39,3 +39,8 @@ Print and copy to clipboard entries corresponding to a series of DOIs written in
 ```bash
 pybib print doi $(cat file_with_one_doi_per_line.txt)
 ```
+
+Print and copy to clipboard entry from arxiv url (you don't need to use the full url, most strings containing the arxiv ID will work just as well):
+```bash
+pybib print arxiv https://arxiv.org/pdf/1803.07119.pdf
+```
