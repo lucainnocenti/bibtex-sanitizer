@@ -137,7 +137,9 @@ def _extract_references(what, where):
 
     # now we extract the stuff
     if what == 'doi':
-        regexp = r'(https?://dx\.doi\.org/[0-9]{2}\.[0-9]{4,6}/\S*)'
+        # for some fucking reason, sometimes doi urls contain the `dx.` part,
+        # and sometimes they don't
+        regexp = r'(https?://(?:dx\.)?doi\.org/[0-9]{2}\.[0-9]{4,6}/\S*)'
     elif what == 'url' or what == 'urls':
         regexp = r'(https?://\S*)'
     else:
