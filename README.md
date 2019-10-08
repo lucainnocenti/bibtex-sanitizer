@@ -23,6 +23,14 @@ Run the following to test that everything is working as intended: `pybib print a
 
 # Usage examples
 
-Print and copy to clipboard the entry corresponding to a series of dois or urls:
+Print and copy to clipboard the entry corresponding to the DOI in a given url:
 
-`pybib print doi https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.102.193601`
+```bash
+pybib print doi https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.102.193601
+```
+
+Print and copy to clipboard entries corresponding to multiple given DOIs
+
+```bash
+pybib print doi 10.1103/PhysRevLett.122.020503 10.1103/PhysRevA.96.062326 10.1088/1367-2630/aaad92
+```
