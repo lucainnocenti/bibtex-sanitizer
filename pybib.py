@@ -120,6 +120,34 @@ def _check_references(bibfile, what):
         bibtexsanitizer.save_bibtex_database_to_file(bibfile, db)
 
 
+def _extract_references(what, where):
+    """Extract information from pdf files.
+
+    Parameters
+    ----------
+    what : str
+        Can be 'doi', and maybe something else some day?
+    where : str
+        Mostly and url where the pdf file is available
+    """
+    from tika import parser
+    import re
+
+    if what != 'doi':
+        print('Look, I haven\'t got the time, just do it yourself.')
+        raise NotImplementedError('The value of `what` was `{}`. Only `doi` is accepted atm.'.format(what))
+
+    raw_text = parser.from_file(where)
+
+    # now we extract the stuff
+    if what == 'doi':
+        regexp = r'(https?://dx\.doi\.org/[0-9]{2}\.[0-9]{4,6}/\S*)'
+        matches = re.findall(regexp, raw_text['content'])
+
+    # return the harvest, one entry per line
+    print('\n'.join(matches))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Manage bib files.')
     parser.add_argument('--bibfile', type=str, default='')
@@ -133,7 +161,7 @@ if __name__ == '__main__':
     # parser for print command
     parser_print = subparsers.add_parser(
         'print', help='Print to terminal the bibtex entry.')
-    parser_print.add_argument('where', type=str)
+    parser_print.add_argument('where', type=str)  # can be doi, arxiv, etc.
     parser_print.add_argument('ids', nargs='*')
     parser_print.add_argument('--action', type=str, default='print')
     # parser for fix command
@@ -146,6 +174,12 @@ if __name__ == '__main__':
         'check', help='Check completeness of fields and other stuff.')
     parser_check.add_argument('what', type=str)
     parser_check.add_argument('--action', type=str, default='check')
+    # parser for extract command
+    parser_extract = subparsers.add_parser(
+        'extract', help='Extract information from pdf files')
+    parser_extract.add_argument('what', type=str)
+    parser_extract.add_argument('where', type=str)
+    parser_extract.add_argument('--action', type=str, default='extract')
     # parse the whole thing
     args = parser.parse_args()
     # the action argument must be defined
@@ -177,5 +211,7 @@ if __name__ == '__main__':
         _fix_bibfile(bibfile, args.method)
     elif args.action == 'check':
         _check_references(bibfile, args.what)
+    elif args.action == 'extract':
+        _extract_references(args.what, args.where)
     else:
         raise ValueError('Unknown action.')
