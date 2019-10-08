@@ -446,6 +446,7 @@ def make_id_for_entry(entry, style='gscholar'):
         else:
             raise KeyError("author, title and year are required.")
     title = entry['title']
+    logger.info('I extracted the title `{}`'.format(title))
     year = entry['year']
     author = entry['author'].split(',')[0].lower()
     # extract first author
@@ -455,8 +456,10 @@ def make_id_for_entry(entry, style='gscholar'):
         author = author[:-1]
     if ' ' in author:
         author = author.split(' ')[0]
-    # extract first word
-    first_word = title.split(' ')[0].lower()
+    # extract first word (without counting one-letter strings as "words")
+    words_in_title = re.findall(r'\S+', title)
+    words_in_title = [w for w in words_in_title if len(w) > 1]
+    first_word = words_in_title[0].lower()
     if first_word[0] == '{':
         first_word = first_word[1:]
     if first_word[-1] == '}':
@@ -465,7 +468,7 @@ def make_id_for_entry(entry, style='gscholar'):
         first_word = first_word.split('-')[0]
     # build new id
     newid = '{}{}{}'.format(author, year, first_word)
-    logger.info('New id for the given entry: {}'.format(newid))
+    logger.info('New id for the given entry: `{}`'.format(newid))
     return newid
 
 

@@ -133,18 +133,19 @@ def _extract_references(what, where):
     from tika import parser
     import re
 
-    if what != 'doi':
-        print('Look, I haven\'t got the time, just do it yourself.')
-        raise NotImplementedError('The value of `what` was `{}`. Only `doi` is accepted atm.'.format(what))
-
     raw_text = parser.from_file(where)
 
     # now we extract the stuff
     if what == 'doi':
         regexp = r'(https?://dx\.doi\.org/[0-9]{2}\.[0-9]{4,6}/\S*)'
-        matches = re.findall(regexp, raw_text['content'])
+    elif what == 'url' or what == 'urls':
+        regexp = r'(https?://\S*)'
+    else:
+        raise ValueError('Unrecognised value of the `what` argument: {}'.format(what))
 
+    matches = re.findall(regexp, raw_text['content'])
     # return the harvest, one entry per line
+    matches = list(set(matches))
     print('\n'.join(matches))
 
 
