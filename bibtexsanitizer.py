@@ -67,12 +67,16 @@ def fix_bibtex_syntax(path, make_backup=True, method='all'):
     with open(path, encoding='utf-8') as f:
         text = f.read()
     if make_backup:
-        shutil.copyfile(path, path + '.old')
+        backup_file = path + '.old'
+        logger.info('Saving backup file at `{}`...'.format(backup_file))
+        shutil.copyfile(path, backup_file)
     # fix fields without curly braces for value
+    logger.info('Ensuring all fields have curly braces...')
     newtext = re.sub(r'([a-z]*)\s*=\s*([^\s{].*)(,\n|\s*})',
                      r'\1 = {\2}\3',
                      text)
     # fix title fields with double curly braces
+    logger.info('Ensuring titles dont\'t have *double* curly braces (because that\'s just horrible)...')
     newtext = re.sub(r'title\s*=\s*{{([^}]*)}}(,\s*\n|\s*})',
                      r'title = {\1}\2',
                      newtext)
@@ -81,8 +85,12 @@ def fix_bibtex_syntax(path, make_backup=True, method='all'):
         f.write(newtext)
     # do addition house cleaning
     if method == 'all':
-        remove_field_from_all_entries(path, ['file', 'abstract', 'arxivid'])
+        fields_to_remove = ['file', 'abstract', 'arxivid']
+        logger.info('Removing unnecessary fields: {}...'.format(', '.join(fields_to_remove)))
+        remove_field_from_all_entries(path, fields_to_remove)
+        logger.info('Checking fields consistency...')
         check_arxiv_fields_consistency(path, fix=True)
+    logger.info('All done! You\'re good to go.')
 
 
 def find_entries_without_field(path_or_db, field):
@@ -365,7 +373,7 @@ def check_arxiv_fields_consistency(path_or_db, fix=True, assume_arxiv=True, assu
 
     If assume_quantph is True then the primaryClass will be automatically set to quant-ph, if missing.
     """
-    path, db = _load_or_use(path_or_db)
+    _, db = _load_or_use(path_or_db)
 
     for entry in db.entries:
         # sometimes the 'archivePrefix' and 'primaryClass' entries exist but are not properly cased. Fix this

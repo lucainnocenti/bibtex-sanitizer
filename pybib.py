@@ -102,9 +102,10 @@ def _fix_bibfile(bibfile, method):
 
 
 def _check_references(bibfile, what):
-    if what == 'published':
+    if what == 'published' or what == 'all':
         # check whether the entries with an arxiv id are associated with a
-        # published journal
+        # published journal. If an arxiv entry is found, the others are filled
+        # with the correct information.
         db = bibtexsanitizer.load_bibtex_database(bibfile)
         for entry in db.entries:
             if (('journal' not in entry or 'doi' not in entry)
