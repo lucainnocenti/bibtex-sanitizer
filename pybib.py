@@ -34,10 +34,12 @@ class Re:
         return self.last_match    
 
 def _extract_doi_from_url(string):
-    # CONTINUE FROM HERE
     gre = Re()
     # strip initial url part, if present
     if gre.match(r'.*(?:doi\.org/)(.*)', string):
+        return gre.last_match.group(1)
+    elif gre.match(r'.*([0-9]{2}\.[0-9]{4}.*)', string):
+        # e.g. revmodphys has these kinds of urls
         return gre.last_match.group(1)
     else:
         return string
@@ -80,9 +82,11 @@ def _add_reference(bibfile, from_where, ids):
 def _print_reference(from_where, identifiers):
     if from_where == 'arxiv':
         ids = [_extract_arxiv_id_from_url(id_) for id_ in identifiers]
+        logger.info('I found the following arxiv ids in the given urls: {}'.format(ids))
         output = bibtexsanitizer.get_bibentry_from_arxiv_id(ids)
     elif from_where == 'doi':
         ids = [_extract_doi_from_url(id_) for id_ in identifiers]
+        logger.info('I found the following dois in the given urls: {}'.format(ids))
         output = bibtexsanitizer.get_bibentry_from_doi(ids)
     else:
         raise NotImplementedError('To Be Done.')
