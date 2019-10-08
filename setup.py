@@ -9,6 +9,7 @@ setup(
 	install_requires=[
 		'bibtexparser',
 		'arxiv',
+                'sh'
 	],
 
 	# metadata for upload to PyPI
