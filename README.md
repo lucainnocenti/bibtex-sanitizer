@@ -20,3 +20,9 @@ add the following line to your `~/.bashrc` (or `~/.zshrc`, or equivalent for you
 alias pybib=/usr/local/share/bibtex-sanitizer/pybib.py
 ```
 Run the following to test that everything is working as intended: `pybib print arxiv 1801.1234`.
+
+# Usage examples
+
+Print and copy to clipboard the entry corresponding to a series of dois or urls:
+
+`pybib print doi https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.102.193601`
