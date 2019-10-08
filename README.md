@@ -49,3 +49,8 @@ Build bibtex entries from a series of DOIs and put them in a file:
 ```bash
 pybib print doi 10.1103/PhysRevLett.122.020503 10.1103/PhysRevA.96.062326 10.1088/1367-2630/aaad92 > file.bib
 ```
+
+Extract the DOI urls from an online pdf and build the corresponding bibtex entries:
+```bash
+pybib print doi $(pybib extract doi https://arxiv.org/pdf/1803.07119.pdf )
+```
