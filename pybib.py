@@ -10,14 +10,10 @@ import arxiv
 import bibtexparser
 
 import bibtexsanitizer
+import utils
 
 
-# initialize logging
-logger = logging.getLogger('pybib')
-logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-logger.addHandler(ch)
+logger = utils.initialize_logging('pybib')
 
 
 class Re:
@@ -25,13 +21,30 @@ class Re:
     def __init__(self):
         self.last_match = None
 
-    def match(self, pattern, text, *args):
-        self.last_match = re.match(pattern, text, *args)
+    def match(self, pattern, text, *args, **kwargs):
+        self.last_match = re.match(pattern, text, *args, **kwargs)
         return self.last_match
 
     def search(self, pattern, text, *args):
         self.last_match = re.search(pattern, text, *args)
         return self.last_match    
+
+
+def _is_arxiv_url(url):
+    gre = Re()
+    # new style arxiv url
+    if gre.match(r'.*(?:pdf|abs)/([0-9]{4}\.[0-9]+).*', url):
+        return True
+    # old style arxiv url
+    elif gre.match(r'.*(?:pdf|abs)/([a-zA-Z-]*/[0-9]*).*', url):
+        return True
+    # we also accept stuff like arxiv:1111.1234
+    elif gre.match(r'.*arxiv:([0-9]{4}\.[0-9]+).*', url, flags=re.IGNORECASE):
+        return True
+    elif gre.match(r'.*arxiv:([a-z-]*\/[0-9]+).*', url, flags=re.IGNORECASE):
+        return True
+    else:
+        return False
 
 
 def extract_doi_from_journal_url(url):
@@ -46,6 +59,9 @@ def extract_doi_from_journal_url(url):
         gre = Re()
         last_doi_bit = gre.match(r'nature\.com/articles/(.*)', url).group(1)
         return basedoi + '/' + last_doi_bit
+    elif url[:22] == 'science.sciencemag.org':
+        logger.error('sciencemag is not supported as of yet')
+        raise ValueError('The fuckers do not write the DOI in an easily retrivable way')
     elif url[:19] == 'quantum-journal.org':
         # the quantum journal uses base doi 10.22331
         basedoi = '10.22331'
@@ -53,7 +69,8 @@ def extract_doi_from_journal_url(url):
         last_doi_bit = gre.match(r'quantum-journal\.org\/papers\/([^\/]*)\/?', url).group(1)
         return basedoi + '/' + last_doi_bit
     else:
-        raise ValueError('Not a bloody nature is it??')
+        logger.error('Unrecognised journal entry for {}'.format(url))
+        raise ValueError('I don\'t know what "{}" means, sorry! :('.format(url))
         
 
 
@@ -75,10 +92,10 @@ def _extract_doi_from_url(string):
         # If the easy ways didn't work, we have to use ad-hoc methods tailored
         # to each journal
 
-        # extract base url
-        gre = Re()
-        baseurl = gre.match(r'https?:\/\/(?:www\.)?(.*)', string).group(1)
-        return extract_doi_from_journal_url(baseurl)
+        # obliterate the https and www bits, if present
+        if gre.match(r'https?:\/\/(?:www\.)?(.*)', string):
+            string = gre.last_match.group(1)
+        return extract_doi_from_journal_url(string)
 
 
 def _extract_arxiv_id_from_url(string):
@@ -89,13 +106,16 @@ def _extract_arxiv_id_from_url(string):
     # if the full new-style string was given, return id part
     elif gre.match(r'.*(?:pdf|abs)/([0-9]{4}\.[0-9]+).*', string):
         return gre.last_match.group(1)
-    # old style string
-    elif gre.match(r'.*(?:pdf|abs)/([a-zA-Z-]*/[0-9]*).*', string):
+    # old style string of the form pdf/quant-ph/666666
+    # elif gre.match(r'.*(?:pdf|abs)/([a-zA-Z-]*/[0-9]*).*', string):
+    elif gre.match(r'.*[: \/]([a-zA-Z-]+/[0-9]+).*', string):
         return gre.last_match.group(1)
     # strings of the form arxiv:id or arxiv/id
     elif gre.match(r'.*arxiv(?::|/)([0-9]{4}\.[0-9]{4,5}).*', string, re.IGNORECASE):
         return gre.last_match.group(1)
     else:
+        logger.error('A little bird told me "{}" contained an arxiv id, but I'
+                     ' could\'n find any, sorry!'.format(string))
         raise NotImplementedError('Unrecognised format')
 
 
@@ -115,15 +135,32 @@ def _add_reference(bibfile, from_where, ids):
             '`{}` is not an acceptable command.'.format(from_where))
 
 
-def _print_reference(from_where, identifiers):
-    if from_where == 'arxiv':
-        ids = [_extract_arxiv_id_from_url(id_) for id_ in identifiers]
-        logger.info('I found the following arxiv ids in the given urls: {}'.format(ids))
-        output = bibtexsanitizer.get_bibentry_from_arxiv_id(ids)
-    elif from_where == 'doi':
-        ids = [_extract_doi_from_url(id_) for id_ in identifiers]
+def _print_reference(args):
+    """Build bibtex records from input strings (doi, url, etc). """
+    if args.where == 'all':
+        ids = []
+        output = []
+        for id_or_url in args.what:
+            # we first check if it's an arxiv url, and if not we just try with
+            # the DOI extractor
+            if _is_arxiv_url(id_or_url):
+                arxiv_id = _extract_arxiv_id_from_url(id_or_url)
+                logger.info('Found arxiv id "{}"'.format(arxiv_id))
+                output.append(bibtexsanitizer.get_bibentry_from_arxiv_id(arxiv_id))
+            else:
+                logger.info('I\'m assuming this string contains a DOI')
+                doi_ = _extract_doi_from_url(id_or_url)
+                logger.info('Found DOI "{}"'.format(doi_))
+                output.append(bibtexsanitizer.get_bibentry_from_doi(doi_))
+        output = ''.join(output)
+    elif args.where == 'doi':
+        ids = [_extract_doi_from_url(id_) for id_ in args.what]
         logger.info('I extracted the following dois in the given urls: {}'.format(ids))
         output = bibtexsanitizer.get_bibentry_from_doi(ids)
+    elif args.where == 'arxiv':
+        ids = [_extract_arxiv_id_from_url(id_) for id_ in args.what]
+        logger.info('I found the following arxiv ids in the given urls: {}'.format(ids))
+        output = bibtexsanitizer.get_bibentry_from_arxiv_id(ids)
     else:
         raise NotImplementedError('To Be Done.')
     # copy to clipboard
@@ -192,29 +229,29 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Manage bib files.')
     parser.add_argument('--bibfile', type=str, default='')
     subparsers = parser.add_subparsers()
-    # parser for add reference command
+    # ---- parser for add reference command
     parser_add = subparsers.add_parser(
         'add', help='Add reference to bibliography.')
     parser_add.add_argument('where', type=str)
     parser_add.add_argument('ids', nargs='*')
     parser_add.add_argument('--action', type=str, default='add')
-    # parser for print command
-    parser_print = subparsers.add_parser(
-        'print', help='Print to terminal the bibtex entry.')
-    parser_print.add_argument('where', type=str)  # can be doi, arxiv, etc.
-    parser_print.add_argument('ids', nargs='*')
-    parser_print.add_argument('--action', type=str, default='print')
-    # parser for fix command
+    # ---- parser for print command
+    parser_print = subparsers.add_parser('print', help='Print to terminal the bibtex entry.')
+    parser_print.add_argument('what', nargs='*')
+    parser_print.add_argument('--where', type=str, default='all')  # can be: doi, arxiv, all.
+    parser_print.set_defaults(action=_print_reference)
+    # parser_print.add_argument('--action', type=str, default='print')
+    # ---- parser for fix command
     parser_fix = subparsers.add_parser(
         'fix', help='Fix badly formatted bib files.')
     parser_fix.add_argument('method', type=str, nargs='?', default='all')
     parser_fix.add_argument('--action', type=str, default='fix')
-    # parser for check command
+    # ---- parser for check command
     parser_check = subparsers.add_parser(
         'check', help='Check completeness of fields and other stuff.')
     parser_check.add_argument('what', type=str)
     parser_check.add_argument('--action', type=str, default='check')
-    # parser for extract command
+    # ---- parser for extract command
     parser_extract = subparsers.add_parser(
         'extract', help='Extract information from pdf files')
     parser_extract.add_argument('what', type=str)
@@ -242,16 +279,17 @@ if __name__ == '__main__':
             bibfile = bibfiles[0]
     else:
         bibfile = args.bibfile
-    # actually go with the parsing
-    if args.action == 'add':
-        _add_reference(bibfile, args.where, args.ids)
-    elif args.action == 'print':
-        _print_reference(args.where, args.ids)
-    elif args.action == 'fix':
-        _fix_bibfile(bibfile, args.method)
-    elif args.action == 'check':
-        _check_references(bibfile, args.what)
-    elif args.action == 'extract':
-        _extract_references(args.what, args.where)
-    else:
-        raise ValueError('Unknown action.')
+    # do the parsing
+    args.action(args)
+    # if args.action == 'add':
+    #     _add_reference(bibfile, args.where, args.ids)
+    # elif args.action == 'print':
+    #     _print_reference(args.where, args.ids)
+    # elif args.action == 'fix':
+    #     _fix_bibfile(bibfile, args.method)
+    # elif args.action == 'check':
+    #     _check_references(bibfile, args.what)
+    # elif args.action == 'extract':
+    #     _extract_references(args.what, args.where)
+    # else:
+    #     raise ValueError('Unknown action.')

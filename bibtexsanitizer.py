@@ -11,12 +11,10 @@ import bibtexparser
 import pyparsing as pp
 import sh
 
-# initialize logging
-logger = logging.getLogger('bibtexsanitizer')
-logger.setLevel(logging.DEBUG)
-ch = logging.StreamHandler()
-ch.setLevel(logging.DEBUG)
-logger.addHandler(ch)
+import utils
+
+
+logger = utils.initialize_logging('pybib')
 
 
 class DOIError(Exception):
@@ -169,7 +167,7 @@ def pull_info_from_arxiv_id(arxiv_id, requested_fields=None, use_doi=True):
     """Pull down paper info from arxiv id."""
     ans = arxiv.query(id_list=[arxiv_id])
     if not ans:
-        logger.warning('No paper found with the ID {}.'.format(arxiv_id))
+        logger.error('No paper found with the ID {}.'.format(arxiv_id))
     ans = ans[0]
     # extract fields
     details = extract_fields_from_arxiv_query_result(
@@ -207,16 +205,19 @@ def extract_fields_from_arxiv_query_result(result, requested_fields=None,
     """Take the answer of an arxiv query and extract relevant fields from it.
     """
     if requested_fields is None:
-        requested_fields = ['title', 'authors', 'doi', 'year']
+        requested_fields = ['title', 'authors', 'doi', 'year',
+                            'journal_reference']
     fields = dict()
     # extract generic fields
     for field in requested_fields:
         # the arxiv api calles the set of authors `authors`, while bibtex uses
-        # the key `author`
+        # the key `author`. Similar adjustments have to be made for other fields
         if field == 'authors':
             fields['author'] = result[field]
         elif field == 'year':
             fields['year'] = str(result['published_parsed'][0])
+        elif field == 'journal_reference':
+            fields['journal'] = result[field]
         else:
             fields[field] = result[field]
     # extract arxiv id info
@@ -466,7 +467,7 @@ def make_id_for_entry(entry, style='gscholar'):
         else:
             raise KeyError("author, title and year are required.")
     title = entry['title']
-    logger.info('I extracted the title `{}`'.format(title))
+    logger.info('I found the title "{}"'.format(title))
     year = entry['year']
     author = entry['author'].split(',')[0].lower()
     # extract first author
@@ -476,9 +477,9 @@ def make_id_for_entry(entry, style='gscholar'):
         author = author[:-1]
     if ' ' in author:
         author = author.split(' ')[0]
-    # extract first word (without counting one-letter strings as "words")
+    # extract first word (looking at "words" with more than 3 chars)
     words_in_title = re.findall(r'\S+', title)
-    words_in_title = [w for w in words_in_title if len(w) > 1]
+    words_in_title = [w for w in words_in_title if len(w) > 3]
     first_word = words_in_title[0].lower()
     if first_word[0] == '{':
         first_word = first_word[1:]
@@ -519,7 +520,7 @@ def make_bibentry_from_arxiv_id(arxiv_id):
 
 
 def make_bibentry_from_doi(doi):
-    """Build bib entry from a DOI."""
+    """Build bib entry from a single DOI."""
     entry = pull_info_from_doi(doi)
     entry['ENTRYTYPE'] = 'article'
     try:
@@ -532,6 +533,25 @@ def make_bibentry_from_doi(doi):
                          ' the DOI database does not hold enough information'
                          ' about the paper (it often lacks a title).'.format(doi))
     return entry
+
+
+def get_bibentry_from_doi(dois):
+    """Return the bibtex entry corresponding to the given doi, as a string.
+    
+    The actual heavy lifting is done by `make_bibentry_from_doi`, here we just
+    check the input, warn the logger, and call `make_bibentry_from_doi` as
+    suitable.
+    """
+    if isinstance(dois, str):
+        logger.info('Making bib entry for the doi "{}"'.format(dois))
+        entries = [make_bibentry_from_doi(dois)]
+    else:  # we assume it's a list of strings otherwise
+        entries = []
+        for doi in dois:
+            logger.info('Making bib entry for the doi "{}"'.format(doi))
+            entries.append(make_bibentry_from_doi(doi))
+    # build the db using the entries
+    return _print_bibtex_string_from_entries(entries)
 
 
 def _print_bibtex_string_from_entries(entries):
@@ -555,19 +575,6 @@ def get_bibentry_from_arxiv_id(arxiv_ids):
     # build the db using the entries
     return _print_bibtex_string_from_entries(entries)
 
-
-def get_bibentry_from_doi(dois):
-    """Return the bibtex entry corresponding to the given doi, as a string."""
-    if isinstance(dois, str):
-        logger.info('Making bib entry for the doi "{}"'.format(dois))
-        entries = [make_bibentry_from_doi(dois)]
-    else:
-        entries = []
-        for doi in dois:
-            logger.info('Making bib entry for the doi "{}"'.format(doi))
-            entries.append(make_bibentry_from_doi(doi))
-    # build the db using the entries
-    return _print_bibtex_string_from_entries(entries)
 
 
 def add_entry_from_arxiv_id(path_or_db, arxiv_id, force=False):
