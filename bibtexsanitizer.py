@@ -62,6 +62,15 @@ def _save_or_return(path_or_db, new_db):
         return new_db
 
 
+def _fix_month_fields(text, action='strtoint'):
+    """Convert all month fields from string to numeric format."""
+    months_strings = ['jan', 'feb', 'mar', 'may', 'jun', 'jul', 'aug', 'sep',
+                      'oct', 'nov', 'dec']
+    for month_str in months_strings:
+        patt = r'month\s*=\s*{{{}}}'.format(month_str)
+        text = re.sub(patt, newpatt, flags=re.I)
+
+
 def fix_bibtex_syntax(path, make_backup=True, method='all'):
     """Fix bad fields in bib file."""
     with open(path, encoding='utf-8') as f:
@@ -80,6 +89,9 @@ def fix_bibtex_syntax(path, make_backup=True, method='all'):
     newtext = re.sub(r'title\s*=\s*{{([^}]*)}}(,\s*\n|\s*})',
                      r'title = {\1}\2',
                      newtext)
+    logger.info('Ensuring months fields are in numeric format...')
+    newtext = _fix_month_fields(newtext, action='strtoint')
+
     # save results
     with open(path, 'w', encoding='utf-8') as f:
         f.write(newtext)
