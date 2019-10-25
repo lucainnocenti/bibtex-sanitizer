@@ -39,13 +39,18 @@ def extract_doi_from_journal_url(url):
 
     Note that here `url` has already been stripped of the https://www bit.
     """
-    print(url[:10])
     if url[:10] == 'nature.com':
         # nature journals all have dois of the form 10.1038/X, with the X bit
         # included in the title
         basedoi = '10.1038'
         gre = Re()
         last_doi_bit = gre.match(r'nature\.com/articles/(.*)', url).group(1)
+        return basedoi + '/' + last_doi_bit
+    elif url[:19] == 'quantum-journal.org':
+        # the quantum journal uses base doi 10.22331
+        basedoi = '10.22331'
+        gre = Re()
+        last_doi_bit = gre.match(r'quantum-journal\.org\/papers\/([^\/]*)\/?', url).group(1)
         return basedoi + '/' + last_doi_bit
     else:
         raise ValueError('Not a bloody nature is it??')
