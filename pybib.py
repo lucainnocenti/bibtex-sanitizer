@@ -194,8 +194,12 @@ def _check_references(bibfile, what):
         bibtexsanitizer.save_bibtex_database_to_file(bibfile, db)
 
 
-def _extract_references(what, where):
+def _extract_references(args):
     """Extract information from pdf files.
+
+    what, where = args
+
+    This currently uses `tika` to extract info from pdfs. It's not ideal.
 
     Parameters
     ----------
@@ -207,17 +211,17 @@ def _extract_references(what, where):
     from tika import parser
     import re
 
-    raw_text = parser.from_file(where)
+    raw_text = parser.from_file(args.where)
 
     # now we extract the stuff
-    if what == 'doi':
+    if args.what == 'doi':
         # for some fucking reason, sometimes doi urls contain the `dx.` part,
         # and sometimes they don't
         regexp = r'(https?://(?:dx\.)?doi\.org/[0-9]{2}\.[0-9]{4,6}/\S*)'
-    elif what == 'url' or what == 'urls':
+    elif args.what == 'url' or args.what == 'urls':
         regexp = r'(https?://\S*)'
     else:
-        raise ValueError('Unrecognised value of the `what` argument: {}'.format(what))
+        raise ValueError('Unrecognised value of the `what` argument: {}'.format(args.what))
 
     matches = re.findall(regexp, raw_text['content'])
     # return the harvest, one entry per line
@@ -256,7 +260,7 @@ if __name__ == '__main__':
         'extract', help='Extract information from pdf files')
     parser_extract.add_argument('what', type=str)
     parser_extract.add_argument('where', type=str)
-    parser_extract.add_argument('--action', type=str, default='extract')
+    parser_extract.set_defaults(action=_extract_references)
     # parse the whole thing
     args = parser.parse_args()
     # the action argument must be defined
