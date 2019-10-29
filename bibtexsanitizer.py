@@ -67,6 +67,7 @@ def _fix_month_fields(text, action='strtoint'):
     for month_str in months_strings:
         patt = r'month\s*=\s*{{{}}}'.format(month_str)
         text = re.sub(patt, newpatt, flags=re.I)
+    # TO FINISHHHHHH
 
 
 def fix_bibtex_syntax(path, make_backup=True, method='all'):
@@ -87,8 +88,8 @@ def fix_bibtex_syntax(path, make_backup=True, method='all'):
     newtext = re.sub(r'title\s*=\s*{{([^}]*)}}(,\s*\n|\s*})',
                      r'title = {\1}\2',
                      newtext)
-    logger.info('Ensuring months fields are in numeric format...')
-    newtext = _fix_month_fields(newtext, action='strtoint')
+    # logger.info('Ensuring months fields are in numeric format...')
+    # newtext = _fix_month_fields(newtext, action='strtoint')
 
     # save results
     with open(path, 'w', encoding='utf-8') as f:
@@ -514,6 +515,9 @@ def fix_ids_to_scholar_style(path):
 def make_bibentry_from_arxiv_id(arxiv_id):
     """Build bib entry from a single arxiv id."""
     entry = pull_info_from_arxiv_id(arxiv_id)
+    # remove None entries, if any were produced
+    entry = {k: v for k, v in entry.items() if v is not None}
+    # add necessary data
     entry['ENTRYTYPE'] = 'article'
     entry['ID'] = make_id_for_entry(entry)
     return entry

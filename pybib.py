@@ -126,13 +126,18 @@ def _add_reference_from_arxiv_id(bibfile, arxiv_ids):
         bibtexsanitizer.add_entries_from_arxiv_ids(bibfile, arxiv_ids)
 
 
-def _add_reference(bibfile, from_where, ids):
-    if from_where == 'arxiv':
-        ids = [_extract_arxiv_id_from_url(id_) for id_ in ids]
-        _add_reference_from_arxiv_id(bibfile, ids)
+def _add_reference(args):
+    """Add references to an existing bib database.
+
+    bibfile, what, ids = args
+
+    """
+    if args.what == 'arxiv':
+        args.ids = [_extract_arxiv_id_from_url(id_) for id_ in args.ids]
+        _add_reference_from_arxiv_id(args.bibfile, args.ids)
     else:
         raise ValueError(
-            '`{}` is not an acceptable command.'.format(from_where))
+            '`{}` is not an acceptable command.'.format(args.what))
 
 
 def _print_reference(args):
@@ -168,10 +173,14 @@ def _print_reference(args):
     # print to console
     print(output)
 
-def _fix_bibfile(bibfile, method):
-    if method != 'all':
+def _fix_bibfile(args):
+    """Fix bibfile
+
+    bibfile, method = args
+    """
+    if args.method != 'all':
         raise NotImplementedError('Just use `all` for now')
-    bibtexsanitizer.fix_bibtex_syntax(bibfile, make_backup=True, method=method)
+    bibtexsanitizer.fix_bibtex_syntax(args.bibfile, make_backup=True, method=args.method)
 
 
 def _check_references(bibfile, what):
@@ -236,9 +245,9 @@ if __name__ == '__main__':
     # ---- parser for add reference command
     parser_add = subparsers.add_parser(
         'add', help='Add reference to bibliography.')
-    parser_add.add_argument('where', type=str)
+    parser_add.add_argument('what', type=str)
     parser_add.add_argument('ids', nargs='*')
-    parser_add.add_argument('--action', type=str, default='add')
+    parser_add.set_defaults(action=_add_reference)
     # ---- parser for print command
     parser_print = subparsers.add_parser('print', help='Print to terminal the bibtex entry.')
     parser_print.add_argument('what', nargs='*')
@@ -249,7 +258,7 @@ if __name__ == '__main__':
     parser_fix = subparsers.add_parser(
         'fix', help='Fix badly formatted bib files.')
     parser_fix.add_argument('method', type=str, nargs='?', default='all')
-    parser_fix.add_argument('--action', type=str, default='fix')
+    parser_fix.set_defaults(action=_fix_bibfile)
     # ---- parser for check command
     parser_check = subparsers.add_parser(
         'check', help='Check completeness of fields and other stuff.')
