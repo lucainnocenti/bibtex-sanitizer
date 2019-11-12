@@ -1,3 +1,4 @@
+import string
 import logging
 
 
@@ -52,3 +53,6 @@ def initialize_logging(logger_name):
         ch.setFormatter(formatter)
         logger.addHandler(ch)
     return logger
+
+def remove_punctuation(s):
+    return s.translate(str.maketrans('', '', string.punctuation))

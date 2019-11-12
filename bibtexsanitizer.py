@@ -478,9 +478,14 @@ def make_id_for_entry(entry, style='gscholar'):
         author = author[:-1]
     if ' ' in author:
         author = author.split(' ')[0]
-    # extract first word (looking at "words" with more than 3 chars)
+    # -- extract first word (looking at "words" with more than 3 chars) --
+    # gather all words in the title
     words_in_title = re.findall(r'\S+', title)
+    # remove punctuation from words
+    words_in_title = [utils.remove_punctuation(w) for w in words_in_title]
+    # filter words with less than 3 chars
     words_in_title = [w for w in words_in_title if len(w) > 3]
+    # extract first word
     first_word = words_in_title[0].lower()
     if first_word[0] == '{':
         first_word = first_word[1:]
