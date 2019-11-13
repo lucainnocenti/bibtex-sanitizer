@@ -168,6 +168,8 @@ def _print_reference(args):
         output = bibtexsanitizer.get_bibentry_from_arxiv_id(ids)
     else:
         raise NotImplementedError('To Be Done.')
+    # replace & with \& (biblatex doesn't like unchecked ampersands)
+    output = output.replace('&', '\&')
     # copy to clipboard
     pyperclip.copy(output)
     # print to console
@@ -180,7 +182,7 @@ def _fix_bibfile(args):
     """
     if args.method != 'all':
         raise NotImplementedError('Just use `all` for now')
-    bibtexsanitizer.fix_bibtex_syntax(args.bibfile, make_backup=True, method=args.method)
+    bibtexsanitizer.fix_bibtex_syntax(args.filename, make_backup=True, method=args.method)
 
 
 def _check_references(bibfile, what):
@@ -257,6 +259,7 @@ if __name__ == '__main__':
     # ---- parser for fix command
     parser_fix = subparsers.add_parser(
         'fix', help='Fix badly formatted bib files.')
+    parser_fix.add_argument('filename', type=str)
     parser_fix.add_argument('method', type=str, nargs='?', default='all')
     parser_fix.set_defaults(action=_fix_bibfile)
     # ---- parser for check command
