@@ -207,7 +207,7 @@ def extract_fields_from_arxiv_query_result(result, requested_fields=None,
     """
     if requested_fields is None:
         requested_fields = ['title', 'authors', 'doi', 'year',
-                            'journal_reference']
+                            'journal_reference', 'url']
     fields = dict()
     # extract generic fields
     for field in requested_fields:
@@ -219,6 +219,8 @@ def extract_fields_from_arxiv_query_result(result, requested_fields=None,
             fields['year'] = str(result['published_parsed'][0])
         elif field == 'journal_reference':
             fields['journal'] = result[field]
+        elif field == 'url':
+            fields['url'] = result['arxiv_url']
         else:
             fields[field] = result[field]
     # extract arxiv id info
