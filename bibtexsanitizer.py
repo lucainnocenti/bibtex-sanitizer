@@ -17,6 +17,9 @@ import utils
 logger = utils.initialize_logging('pybib')
 
 
+MONTH_STRINGS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep',
+                 'oct', 'nov', 'dec']
+
 class DOIError(Exception):
     pass
 
@@ -206,9 +209,10 @@ def extract_fields_from_arxiv_query_result(result, requested_fields=None,
     """Take the answer of an arxiv query and extract relevant fields from it.
     """
     if requested_fields is None:
-        requested_fields = ['title', 'authors', 'doi', 'year',
+        requested_fields = ['title', 'authors', 'doi', 'year', 'month',
                             'journal_reference', 'url']
     fields = dict()
+    print(result)
     # extract generic fields
     for field in requested_fields:
         # the arxiv api calles the set of authors `authors`, while bibtex uses
@@ -217,6 +221,8 @@ def extract_fields_from_arxiv_query_result(result, requested_fields=None,
             fields['author'] = result[field]
         elif field == 'year':
             fields['year'] = str(result['published_parsed'][0])
+        elif field == 'month':
+            fields['month'] = str(MONTH_STRINGS[result['published_parsed'][1] - 1])
         elif field == 'journal_reference':
             fields['journal'] = result[field]
         elif field == 'url':
