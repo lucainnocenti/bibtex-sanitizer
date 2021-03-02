@@ -466,7 +466,11 @@ def make_id_for_entry(entry, style='gscholar'):
     try:
         entry['title']
     except KeyError:
-        raise KeyError('No dice without a title!')
+        logger.info('Title entry missing. Could not create id for entry.')
+        logger.info(entry)
+        raise KeyError('I could not find title information from the given DOI/'
+                       'arXiv. This often happens with books, which for some r'
+                       'easons often do no include the title information.')
     try:
         entry['author']
         entry['year']
@@ -552,9 +556,9 @@ def make_bibentry_from_doi(doi):
         logger.debug('Full entry:')
         logger.debug(entry)
         raise DOIError('Something went wrong while fetching'
-                         ' the id to use for the doi "{}". Probably,'
-                         ' the DOI database does not hold enough information'
-                         ' about the paper (it often lacks a title).'.format(doi))
+                       ' the id to use for the doi "{}". Probably,'
+                       ' the DOI database does not hold enough information'
+                       ' about the paper (it often lacks a title).'.format(doi))
     return entry
 
 
