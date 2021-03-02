@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import shutil
+from tqdm import tqdm
 from collections import OrderedDict
 from pprint import pprint
 
@@ -99,7 +100,10 @@ def fix_bibtex_syntax(path, make_backup=True, method='all'):
         f.write(newtext)
     # do addition house cleaning
     if method == 'all':
-        fields_to_remove = ['file', 'abstract', 'arxivid']
+        fields_to_remove = [
+            'file', 'abstract', 'arxivid', 'bdsk-url-1', 'bdsk-url-2',
+            'keywords', 'mendeley-tags', 'date-modified', 'date-added',
+            'link', 'numpages']
         logger.info('Removing unnecessary fields: {}...'.format(', '.join(fields_to_remove)))
         remove_field_from_all_entries(path, fields_to_remove)
         logger.info('Checking fields consistency...')
@@ -212,7 +216,6 @@ def extract_fields_from_arxiv_query_result(result, requested_fields=None,
         requested_fields = ['title', 'authors', 'doi', 'year', 'month',
                             'journal_reference', 'url']
     fields = dict()
-    print(result)
     # extract generic fields
     for field in requested_fields:
         # the arxiv api calles the set of authors `authors`, while bibtex uses
@@ -322,17 +325,20 @@ def _update_entry_from_doi(entry):
     if 'doi' not in entry:
         return entry
     accepted_fields = ['title', 'volume', 'year', 'number', 'journal',
-                       'publisher', 'month']
+                       'publisher', 'month', 'pages']
     new_fields = pull_info_from_doi(entry['doi'], accepted_fields)
     entry.update(new_fields)
     return entry
 
 
-def update_entries_from_doi(path_or_db):
+def update_entries_from_doi(path_or_db, monitor=True):
     # parsing input parameters
     _, db = _load_or_use(path_or_db)
     # doing the deed
-    for entry in db.entries:
+    iterator = db.entries
+    if monitor:
+        iterator = tqdm(iterator)
+    for entry in iterator:
         _update_entry_from_doi(entry)
     # save or return result
     return _save_or_return(path_or_db, db)

@@ -153,7 +153,7 @@ def _print_reference(args):
                 logger.info('Found arxiv id "{}"'.format(arxiv_id))
                 output.append(bibtexsanitizer.get_bibentry_from_arxiv_id(arxiv_id))
             else:
-                logger.info('I\'m assuming this string contains a DOI')
+                logger.info('I\'m assuming the string "{}" contains a DOI'.format(id_or_url))
                 doi_ = _extract_doi_from_url(id_or_url)
                 logger.info('Found DOI "{}"'.format(doi_))
                 output.append(bibtexsanitizer.get_bibentry_from_doi(doi_))
@@ -185,15 +185,17 @@ def _fix_bibfile(args):
     bibtexsanitizer.fix_bibtex_syntax(args.filename, make_backup=True, method=args.method)
 
 
-def _check_references(bibfile, what):
+def _check_references(args):
+    filename = args.filename
+    what = args.what
     if what == 'published' or what == 'all':
         # check whether the entries with an arxiv id are associated with a
         # published journal. If an arxiv entry is found, the others are filled
         # with the correct information.
-        db = bibtexsanitizer.load_bibtex_database(bibfile)
+        db = bibtexsanitizer.load_bibtex_database(filename)
         for entry in db.entries:
             if (('journal' not in entry or 'doi' not in entry)
-                    and 'eprint' in entry):
+                    and ('eprint' in entry)):
                 details = bibtexsanitizer.pull_info_from_arxiv_id(
                     entry['eprint'])
                 if 'doi' in details and 'doi' not in entry:
@@ -202,7 +204,7 @@ def _check_references(bibfile, what):
                 if 'journal' in details and 'journal' not in entry:
                     logger.info('Adding journal for {}'.format(entry['ID']))
                     entry['journal'] = details['journal']
-        bibtexsanitizer.save_bibtex_database_to_file(bibfile, db)
+        bibtexsanitizer.save_bibtex_database_to_file(filename, db)
 
 
 def _extract_references(args):
@@ -265,8 +267,9 @@ if __name__ == '__main__':
     # ---- parser for check command
     parser_check = subparsers.add_parser(
         'check', help='Check completeness of fields and other stuff.')
-    parser_check.add_argument('what', type=str)
-    parser_check.add_argument('--action', type=str, default='check')
+    parser_check.add_argument('filename', type=str)
+    parser_check.add_argument('--what', type=str, default='all')
+    parser_check.set_defaults(action=_check_references)
     # ---- parser for extract command
     parser_extract = subparsers.add_parser(
         'extract', help='Extract information from pdf files')
