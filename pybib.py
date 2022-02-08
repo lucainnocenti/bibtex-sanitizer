@@ -61,7 +61,7 @@ def extract_doi_from_journal_url(url):
         return basedoi + '/' + last_doi_bit
     elif url[:22] == 'science.sciencemag.org':
         logger.error('sciencemag is not supported as of yet')
-        raise ValueError('The fuckers do not write the DOI in an easily retrivable way')
+        raise ValueError('Science URLs do not include the DOI in an easily retrivable way')
     elif url[:19] == 'quantum-journal.org':
         # the quantum journal uses base doi 10.22331
         basedoi = '10.22331'
